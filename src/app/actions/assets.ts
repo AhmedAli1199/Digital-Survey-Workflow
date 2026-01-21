@@ -47,6 +47,7 @@ const createAssetSchema = z.object({
   obstruction_type: z.string().optional(),
   obstruction_offset_mm: z.coerce.number().optional(),
   obstruction_notes: z.string().optional(),
+  cap_end_notes: z.string().optional(),
 });
 
 export async function createAsset(formData: FormData) {
@@ -62,6 +63,7 @@ export async function createAsset(formData: FormData) {
     obstruction_type: String(formData.get('obstruction_type') ?? ''),
     obstruction_offset_mm: formData.get('obstruction_offset_mm') || undefined,
     obstruction_notes: String(formData.get('obstruction_notes') ?? ''),
+    cap_end_notes: String(formData.get('cap_end_notes') ?? ''),
   };
 
   const parsed = createAssetSchema.safeParse(raw);
@@ -82,28 +84,44 @@ export async function createAsset(formData: FormData) {
   const requestedComplexity = Number(parsed.data.complexity_level);
   const complexity = Math.max(minComplexity, requestedComplexity);
 
-  const { data: asset, error: assetError } = await supabase
-    .from('assets')
-    .insert({
-      survey_id: parsed.data.survey_id,
-      asset_tag: parsed.data.asset_tag,
-      asset_type: parsed.data.asset_type,
-      quantity: parsed.data.quantity,
-      location_area: parsed.data.location_area || null,
-      service: parsed.data.service || null,
-      complexity_level: complexity,
-      obstruction_present: parsed.data.obstruction_present,
-      obstruction_type: parsed.data.obstruction_present ? parsed.data.obstruction_type || null : null,
-      obstruction_offset_mm:
-        parsed.data.obstruction_present && parsed.data.obstruction_offset_mm != null
-          ? parsed.data.obstruction_offset_mm
-          : null,
-      obstruction_notes: parsed.data.obstruction_present ? parsed.data.obstruction_notes || null : null,
-    })
-    .select('id')
-    .single();
+  const requiresCapEnd = Boolean((config as any).requires_cap_end);
+  const capEndNotes = parsed.data.cap_end_notes?.trim() ? parsed.data.cap_end_notes.trim() : null;
 
-  if (assetError) throw new Error(assetError.message);
+  const baseInsert = {
+    survey_id: parsed.data.survey_id,
+    asset_tag: parsed.data.asset_tag,
+    asset_type: parsed.data.asset_type,
+    quantity: parsed.data.quantity,
+    location_area: parsed.data.location_area || null,
+    service: parsed.data.service || null,
+    complexity_level: complexity,
+    obstruction_present: parsed.data.obstruction_present,
+    obstruction_type: parsed.data.obstruction_present ? parsed.data.obstruction_type || null : null,
+    obstruction_offset_mm:
+      parsed.data.obstruction_present && parsed.data.obstruction_offset_mm != null
+        ? parsed.data.obstruction_offset_mm
+        : null,
+    obstruction_notes: parsed.data.obstruction_present ? parsed.data.obstruction_notes || null : null,
+  };
+
+  const insertWithCapEnd = {
+    ...baseInsert,
+    cap_end_required: requiresCapEnd,
+    cap_end_notes: requiresCapEnd ? capEndNotes : null,
+  };
+
+  let insertAttempt = await supabase.from('assets').insert(insertWithCapEnd).select('id').single();
+  if (insertAttempt.error) {
+    const msg = insertAttempt.error.message || '';
+    // Backwards compatibility: if the DB hasn't been migrated yet, retry without cap-end columns.
+    if (msg.includes('cap_end_required') || msg.includes('cap_end_notes')) {
+      insertAttempt = await supabase.from('assets').insert(baseInsert).select('id').single();
+    }
+  }
+
+  const asset = insertAttempt.data;
+  const assetError = insertAttempt.error;
+  if (assetError || !asset) throw new Error(assetError?.message ?? 'Failed to create asset');
 
   // Measurements
   const measurementRows: Array<{ asset_id: string; key: string; label: string; value_mm: number; sequence?: number | null }> = [];
@@ -156,14 +174,18 @@ export async function createAsset(formData: FormData) {
   // Photos
   const bucket = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ?? 'survey-photos';
 
-  const requiredCorePhotoTypes: string[] = Array.isArray(config.required_photo_types)
-    ? config.required_photo_types
-    : ['overall', 'side', 'connection', 'tape_length', 'tape_diameter'];
+  // Level 1: only a single main photo is required.
+  const requiredCorePhotoTypes: string[] =
+    complexity === 1
+      ? ['main']
+      : Array.isArray(config.required_photo_types)
+        ? config.required_photo_types
+        : ['overall', 'side', 'connection', 'tape_length', 'tape_diameter'];
 
   const photoTypes: Array<{ photo_type: string; input: string; label: string }> = requiredCorePhotoTypes.map((t) => ({
     photo_type: t,
     input: `p_${t}`,
-    label: t.replace(/_/g, ' '),
+    label: t === 'main' ? 'main photo' : t.replace(/_/g, ' '),
   }));
 
   if (parsed.data.obstruction_present) {

@@ -85,6 +85,21 @@ export default async function TemplateAdminEdit(props: { params: Promise<{ asset
             </div>
 
             <div className="md:col-span-2">
+              <label className="flex items-center gap-3 text-xs font-semibold text-slate-600">
+                <input
+                  type="checkbox"
+                  name="requires_cap_end"
+                  defaultChecked={Boolean((cfg as any).requires_cap_end)}
+                  className="h-4 w-4"
+                />
+                Requires cap end
+              </label>
+              <div className="mt-1 text-xs text-slate-500">
+                When enabled, surveyors will see a cap-end notes box when adding this asset.
+              </div>
+            </div>
+
+            <div className="md:col-span-2">
               <label className="text-xs font-semibold text-slate-600">Level 1 measurement keys (comma-separated)</label>
               <input
                 name="level1_measurement_keys"

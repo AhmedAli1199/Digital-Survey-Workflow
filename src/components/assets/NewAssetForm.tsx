@@ -17,6 +17,12 @@ const CORE_PHOTOS: Array<{ photoType: string; label: string }> = [
   { photoType: 'tape_diameter', label: 'Tape on key diameter' },
 ];
 
+const LEVEL1_MAIN_PHOTO: PhotoField = {
+  photoType: 'main',
+  label: 'Main photo (overall view)',
+  required: true,
+};
+
 export function NewAssetForm(props: { surveyId: string; configs: AssetTypeConfigRow[] }) {
   const initialConfig = props.configs[0];
 
@@ -41,11 +47,15 @@ export function NewAssetForm(props: { surveyId: string; configs: AssetTypeConfig
   const level2Steps = Array.isArray(config?.level2_template?.steps) ? config.level2_template.steps : [];
   const hasLevel2Template = level2Steps.length > 0;
   const drawingUrl = typeof config?.level2_template?.drawing_url === 'string' ? config.level2_template.drawing_url : null;
+  const requiresCapEnd = Boolean((config as any)?.requires_cap_end);
 
   const effectiveComplexitySafe: 1 | 2 = effectiveComplexity === 2 && !hasLevel2Template ? 1 : effectiveComplexity;
 
   const corePhotoFields: PhotoField[] = useMemo(() => {
-    // Prefer config.required_photo_types if present, but fall back to CORE_PHOTOS labels.
+    // Level 1: only a single main photo (overall) is required.
+    if (effectiveComplexitySafe === 1) return [LEVEL1_MAIN_PHOTO];
+
+    // Level 2: prefer config.required_photo_types if present, but fall back to CORE_PHOTOS labels.
     const configTypes = Array.isArray(config?.required_photo_types) ? config.required_photo_types : null;
     const types = configTypes?.length ? configTypes : CORE_PHOTOS.map((p) => p.photoType);
 
@@ -57,7 +67,7 @@ export function NewAssetForm(props: { surveyId: string; configs: AssetTypeConfig
         required: true,
       };
     });
-  }, [config]);
+  }, [config, effectiveComplexitySafe]);
 
   const obstructionFields: PhotoField[] = useMemo(
     () => [
@@ -185,18 +195,49 @@ export function NewAssetForm(props: { surveyId: string; configs: AssetTypeConfig
       </div>
 
       {effectiveComplexitySafe === 2 ? (
-        <>
-          {drawingUrl ? <DiagramViewer url={drawingUrl} /> : null}
-          <Level2Stepper steps={level2Steps} />
-        </>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="self-start md:sticky md:top-4">
+            {drawingUrl ? (
+              <DiagramViewer url={drawingUrl} />
+            ) : (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-950">
+                No diagram PDF is configured for this asset type yet.
+              </div>
+            )}
+          </div>
+          <div className="min-w-0">
+            <Level2Stepper steps={level2Steps} />
+          </div>
+        </div>
       ) : (
         <MeasurementInputs title="Measurements (Level 1)" measurementKeys={level1Keys} />
       )}
 
+      {requiresCapEnd ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6">
+          <div className="text-sm font-semibold tracking-tight">Cap end</div>
+          <div className="mt-1 text-xs text-slate-500">
+            This asset type requires a cap end. Add any notes to help the workshop team.
+          </div>
+          <div className="mt-4">
+            <label className="text-xs font-semibold text-slate-600">Cap end notes</label>
+            <textarea
+              name="cap_end_notes"
+              className="mt-1 min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
+              placeholder="e.g., Cap end needed on outlet side; match DN; include gasket..."
+            />
+          </div>
+        </div>
+      ) : null}
+
       <PhotoInputs
-        title="Mandatory photos"
+        title={effectiveComplexitySafe === 1 ? 'Main photo' : 'Mandatory photos'}
         fields={corePhotoFields}
-        note="These are required for every asset. Keep them consistent for CAD and quoting."
+        note={
+          effectiveComplexitySafe === 1
+            ? 'Level 1 assets only require one clear overall photo.'
+            : 'These are required for every Level 2 asset. Keep them consistent for CAD and quoting.'
+        }
       />
 
       {effectiveComplexitySafe === 2 && level2DimensionPhotoFields.length ? (

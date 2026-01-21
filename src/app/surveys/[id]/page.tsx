@@ -118,7 +118,7 @@ export default async function SurveyDetailPage(props: { params: Promise<{ id: st
                   </span>
                 </div>
                 <div className="col-span-1 text-right text-xs text-slate-500">
-                  {a.obstruction_present ? 'Obs' : ''}
+                  {(a as any).cap_end_required ? 'Cap' : a.obstruction_present ? 'Obs' : ''}
                 </div>
               </div>
             ))}

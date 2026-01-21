@@ -36,6 +36,9 @@ create table if not exists public.assets (
   obstruction_offset_mm numeric,
   obstruction_notes text,
 
+  cap_end_required boolean not null default false,
+  cap_end_notes text,
+
   calculated_price numeric(12,2),
   pricing_breakdown jsonb,
 
@@ -78,6 +81,7 @@ create table if not exists public.asset_type_configs (
   asset_type text primary key,
   display_name text not null,
   min_complexity_level integer not null default 1,
+  requires_cap_end boolean not null default false,
   level1_measurement_keys text[] not null default array[]::text[],
   level2_template jsonb, -- { drawing_url?: string, steps: [{key,label,requiresPhoto}] }
   required_photo_types text[] not null default array[]::text[],
@@ -85,6 +89,12 @@ create table if not exists public.asset_type_configs (
 
   constraint asset_type_configs_min_complexity_chk check (min_complexity_level in (1,2))
 );
+
+-- Migration helpers (safe to run multiple times)
+alter table public.assets add column if not exists cap_end_required boolean not null default false;
+alter table public.assets add column if not exists cap_end_notes text;
+
+alter table public.asset_type_configs add column if not exists requires_cap_end boolean not null default false;
 
 -- Pricing rules (simple and replaceable)
 create table if not exists public.pricing_rules (

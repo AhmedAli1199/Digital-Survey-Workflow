@@ -22,6 +22,7 @@ const updateSchema = z.object({
   asset_type: z.string().min(1),
   display_name: z.string().min(1),
   min_complexity_level: z.coerce.number().int().min(1).max(2),
+  requires_cap_end: z.coerce.boolean().default(false),
   level1_measurement_keys: z.string().optional(),
   required_photo_types: z.string().optional(),
   level2_steps_json: z.string().optional(),
@@ -32,6 +33,7 @@ export async function updateAssetTemplate(formData: FormData) {
     asset_type: String(formData.get('asset_type') ?? ''),
     display_name: String(formData.get('display_name') ?? ''),
     min_complexity_level: formData.get('min_complexity_level') ?? '1',
+    requires_cap_end: formData.get('requires_cap_end') ? true : false,
     level1_measurement_keys: String(formData.get('level1_measurement_keys') ?? ''),
     required_photo_types: String(formData.get('required_photo_types') ?? ''),
     level2_steps_json: String(formData.get('level2_steps_json') ?? ''),
@@ -119,13 +121,20 @@ export async function updateAssetTemplate(formData: FormData) {
     .update({
       display_name: parsed.data.display_name,
       min_complexity_level: parsed.data.min_complexity_level,
+      requires_cap_end: parsed.data.requires_cap_end,
       level1_measurement_keys: level1Keys,
       required_photo_types: requiredPhotos,
       level2_template: nextLevel2Template,
     })
     .eq('asset_type', parsed.data.asset_type);
 
-  if (updateErr) throw new Error(updateErr.message);
+  if (updateErr) {
+    // Helpful message if DB hasn't been migrated yet.
+    if ((updateErr.message || '').includes('requires_cap_end')) {
+      throw new Error('Template update failed: requires_cap_end column is missing. Apply the schema migration in supabase/schema.sql.');
+    }
+    throw new Error(updateErr.message);
+  }
 
   redirect(`/admin/templates/${parsed.data.asset_type}`);
 }

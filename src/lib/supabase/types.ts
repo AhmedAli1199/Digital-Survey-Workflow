@@ -27,6 +27,8 @@ export type AssetRow = {
   obstruction_type: string | null;
   obstruction_offset_mm: string | number | null;
   obstruction_notes: string | null;
+  cap_end_required?: boolean;
+  cap_end_notes?: string | null;
   calculated_price: string | number | null;
   created_at: string;
   updated_at: string;
@@ -36,6 +38,7 @@ export type AssetTypeConfigRow = {
   asset_type: string;
   display_name: string;
   min_complexity_level: 1 | 2;
+  requires_cap_end?: boolean;
   level1_measurement_keys: string[];
   level2_template: any | null;
   required_photo_types: string[];

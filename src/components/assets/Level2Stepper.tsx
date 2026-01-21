@@ -28,7 +28,7 @@ export function Level2Stepper(props: { steps: Step[] }) {
         <div>
           <div className="text-sm font-semibold tracking-tight">Structured measurements</div>
           <div className="mt-1 text-xs text-slate-500">
-            Step-by-step capture (Level 2). Photos per dimension will be enforced once uploads are wired.
+            Step-by-step capture (Level 2). If a dimension requires a photo, it must be provided before saving.
           </div>
         </div>
         <div className="text-xs text-slate-500">
