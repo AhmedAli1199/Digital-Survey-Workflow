@@ -25,6 +25,7 @@ function safeName(value: string): string {
 const updateSchema = z.object({
   asset_type: z.string().min(1),
   display_name: z.string().min(1),
+  asset_category: z.string().min(1),
   min_complexity_level: z.coerce.number().int().min(1).max(2),
   level1_measurement_keys: z.string().optional(),
   required_photo_types: z.string().optional(),
@@ -32,10 +33,112 @@ const updateSchema = z.object({
   level2_table_region_json: z.string().optional(),
 });
 
+const createVariantSchema = z.object({
+  asset_type: z
+    .string()
+    .min(1)
+    .max(80)
+    .regex(/^[a-z0-9_-]+$/i, 'Use only letters, numbers, underscore, dash'),
+  display_name: z.string().min(1).max(120),
+  asset_category: z.string().min(1).max(120),
+  min_complexity_level: z.coerce.number().int().min(1).max(2).default(1),
+});
+
+export async function createAssetVariant(formData: FormData) {
+  const parsed = createVariantSchema.safeParse({
+    asset_type: String(formData.get('asset_type') ?? ''),
+    display_name: String(formData.get('display_name') ?? ''),
+    asset_category: String(formData.get('asset_category') ?? ''),
+    min_complexity_level: formData.get('min_complexity_level') ?? '1',
+  });
+
+  if (!parsed.success) {
+    throw new Error('Invalid variant input');
+  }
+
+  const supabase = createSupabaseAdminClient();
+
+  const { error } = await supabase.from('asset_type_configs').insert({
+    asset_type: parsed.data.asset_type,
+    display_name: parsed.data.display_name,
+    asset_category: parsed.data.asset_category,
+    min_complexity_level: parsed.data.min_complexity_level,
+    level1_measurement_keys: [],
+    required_photo_types: [],
+    level2_template: null,
+  });
+
+  if (error) {
+    // Common case: duplicate primary key.
+    if ((error.message || '').toLowerCase().includes('duplicate')) {
+      throw new Error('That variant key already exists. Choose a unique asset_type key.');
+    }
+    throw new Error(error.message);
+  }
+
+  redirect(`/admin/templates/${parsed.data.asset_type}`);
+}
+
+function guessCategory(assetType: string, displayName: string): string {
+  const hay = `${assetType} ${displayName}`.toLowerCase();
+
+  // Keep this intentionally conservative and easy to override in the UI.
+  if (hay.includes('strainer')) return 'Strainers';
+  if (hay.includes('valve')) return 'Valves';
+  if (hay.includes('flange') || hay.includes('flanged')) return 'Flanges';
+  if (hay.includes('pipe') || hay.includes('pipework')) return 'Pipes';
+
+  return 'uncategorized';
+}
+
+export async function autoCategorizeAssetVariants() {
+  const supabase = createSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('asset_type_configs')
+    .select('asset_type, display_name, asset_category');
+
+  if (error) throw new Error(error.message);
+
+  const rows = (data ?? []) as Array<{ asset_type: string; display_name: string; asset_category?: string | null }>;
+  const toUpdate = rows
+    .map((r) => {
+      const current = String(r.asset_category ?? 'uncategorized').trim() || 'uncategorized';
+      if (current !== 'uncategorized') return null;
+      const next = guessCategory(String(r.asset_type ?? ''), String(r.display_name ?? ''));
+      if (!next || next === 'uncategorized') return null;
+      return { asset_type: r.asset_type, asset_category: next };
+    })
+    .filter(Boolean) as Array<{ asset_type: string; asset_category: string }>;
+
+  if (toUpdate.length === 0) {
+    redirect('/admin/templates');
+  }
+
+  // Batch per category to avoid per-row round trips.
+  const byCategory = new Map<string, string[]>();
+  for (const u of toUpdate) {
+    const list = byCategory.get(u.asset_category) ?? [];
+    list.push(u.asset_type);
+    byCategory.set(u.asset_category, list);
+  }
+
+  for (const [cat, types] of byCategory.entries()) {
+    const { error: updateErr } = await supabase
+      .from('asset_type_configs')
+      .update({ asset_category: cat })
+      .in('asset_type', types);
+    if (updateErr) throw new Error(updateErr.message);
+  }
+
+  redirect('/admin/templates');
+}
+
 export async function updateAssetTemplate(formData: FormData) {
   const parsed = updateSchema.safeParse({
     asset_type: String(formData.get('asset_type') ?? ''),
     display_name: String(formData.get('display_name') ?? ''),
+    asset_category: String(formData.get('asset_category') ?? ''),
     min_complexity_level: formData.get('min_complexity_level') ?? '1',
     level1_measurement_keys: String(formData.get('level1_measurement_keys') ?? ''),
     required_photo_types: String(formData.get('required_photo_types') ?? ''),
@@ -200,6 +303,7 @@ export async function updateAssetTemplate(formData: FormData) {
     .from('asset_type_configs')
     .update({
       display_name: parsed.data.display_name,
+      asset_category: parsed.data.asset_category,
       min_complexity_level: parsed.data.min_complexity_level,
       level1_measurement_keys: level1Keys,
       required_photo_types: requiredPhotos,

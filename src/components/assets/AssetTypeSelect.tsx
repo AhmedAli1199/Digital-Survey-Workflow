@@ -20,13 +20,13 @@ export function AssetTypeSelect(props: {
   return (
     <select
       name={props.name}
-      defaultValue={props.value}
+      value={props.value ?? ''}
       onChange={(e) => props.onChange?.(e.target.value)}
       className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
       required
     >
       <option value="" disabled>
-        Select asset type
+        Select variant
       </option>
       {options.map((o) => (
         <option key={o.value} value={o.value}>

@@ -75,6 +75,20 @@ export default async function TemplateAdminEdit(props: { params: Promise<{ asset
             </div>
 
             <div>
+              <label className="text-xs font-semibold text-slate-600">Category *</label>
+              <input
+                name="asset_category"
+                defaultValue={(cfg as any).asset_category ?? 'uncategorized'}
+                required
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
+                placeholder="e.g., Check valve"
+              />
+              <div className="mt-1 text-xs text-slate-500">
+                Broad category shown to surveyors first; variants appear in the second dropdown.
+              </div>
+            </div>
+
+            <div>
               <label className="text-xs font-semibold text-slate-600">Minimum complexity *</label>
               <select
                 name="min_complexity_level"

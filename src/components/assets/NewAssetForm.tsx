@@ -30,15 +30,43 @@ const LEVEL1_MAIN_PHOTO: PhotoField = {
 export function NewAssetForm(props: { surveyId: string; configs: AssetTypeConfigRow[] }) {
   const initialConfig = props.configs[0];
 
-  const [assetType, setAssetType] = useState<string>(initialConfig?.asset_type ?? '');
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of props.configs) {
+      const cat = String((c as any).asset_category ?? 'uncategorized').trim();
+      set.add(cat || 'uncategorized');
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [props.configs]);
+
+  const initialCategory = String((initialConfig as any)?.asset_category ?? categories[0] ?? 'uncategorized');
+
+  const [assetCategory, setAssetCategory] = useState<string>(initialCategory);
+
+  const configsForCategory = useMemo(() => {
+    return props.configs.filter((c) => String((c as any).asset_category ?? 'uncategorized') === assetCategory);
+  }, [props.configs, assetCategory]);
+
+  const [assetType, setAssetType] = useState<string>(configsForCategory[0]?.asset_type ?? initialConfig?.asset_type ?? '');
   const [requestedComplexity, setRequestedComplexity] = useState<1 | 2>(
     (initialConfig?.min_complexity_level ?? 1) as 1 | 2,
   );
   const [obstructionPresent, setObstructionPresent] = useState(false);
 
+  useEffect(() => {
+    // When category changes, pick the first variant in that category.
+    const next = configsForCategory[0]?.asset_type ?? '';
+    if (next && next !== assetType) {
+      setAssetType(next);
+    }
+    // If category has no variants, clear selection.
+    if (!next) setAssetType('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assetCategory]);
+
   const config = useMemo(
-    () => props.configs.find((c) => c.asset_type === assetType) ?? initialConfig,
-    [assetType, props.configs, initialConfig],
+    () => props.configs.find((c) => c.asset_type === assetType) ?? configsForCategory[0] ?? initialConfig,
+    [assetType, props.configs, configsForCategory, initialConfig],
   );
 
   const minComplexity = (config?.min_complexity_level ?? 1) as 1 | 2;
@@ -148,10 +176,34 @@ export function NewAssetForm(props: { surveyId: string; configs: AssetTypeConfig
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-600">Asset type *</label>
+            <label className="text-xs font-semibold text-slate-600">Asset category *</label>
+            <select
+              name="asset_category"
+              value={assetCategory}
+              onChange={(e) => {
+                setAssetCategory(e.target.value);
+                setCapEndRequired(false);
+              }}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
+              required
+            >
+              <option value="" disabled>
+                Select category
+              </option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <div className="mt-1 text-xs text-slate-500">Pick a broad category, then choose the variant.</div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-600">Variant *</label>
             <AssetTypeSelect
               name="asset_type"
-              configs={props.configs}
+              configs={configsForCategory}
               value={assetType}
               onChange={(v) => {
                 setAssetType(v);

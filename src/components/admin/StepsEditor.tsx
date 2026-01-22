@@ -2,8 +2,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { PdfHotspotPicker } from '@/components/admin/PdfHotspotPicker';
-import type { NormalizedHotspot } from '@/components/admin/PdfHotspotPickerTypes';
 import { ImageRegionPicker, type NormalizedRect } from '@/components/admin/ImageRegionPicker';
 
 export type TemplateStep = {
@@ -11,8 +9,15 @@ export type TemplateStep = {
   label: string;
   sequence: number;
   requiresPhoto: boolean;
-  hotspot?: NormalizedHotspot | null;
+  hotspot?: unknown | null;
 };
+
+type EditorStep = TemplateStep & { _rowId: string };
+
+function createRowId() {
+  // Avoid losing focus on inputs by keeping a stable React key per row.
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+}
 
 function normalizeKey(value: string) {
   return value
@@ -28,10 +33,11 @@ export function StepsEditor(props: {
   imageUrl?: string | null;
   initialTableRegion?: NormalizedRect | null;
 }) {
-  const [steps, setSteps] = useState<TemplateStep[]>(() => {
+  const [steps, setSteps] = useState<EditorStep[]>(() => {
     const base = props.initialSteps?.length ? props.initialSteps : [];
     return base
       .map((s, idx) => ({
+        _rowId: String((s as any)?._rowId ?? createRowId()),
         key: String(s.key ?? ''),
         label: String(s.label ?? ''),
         sequence: Number(s.sequence ?? idx + 1),
@@ -41,11 +47,12 @@ export function StepsEditor(props: {
       .sort((a, b) => a.sequence - b.sequence);
   });
 
-  const [activeKey, setActiveKey] = useState<string | null>(() => (steps[0]?.key ? steps[0].key : null));
-
   const [tableRegion, setTableRegion] = useState<NormalizedRect | null>(() => props.initialTableRegion ?? null);
 
-  const json = useMemo(() => JSON.stringify(steps), [steps]);
+  const json = useMemo(
+    () => JSON.stringify(steps.map(({ _rowId: _ignored, ...rest }) => rest)),
+    [steps],
+  );
   const tableRegionJson = useMemo(() => JSON.stringify(tableRegion), [tableRegion]);
 
   return (
@@ -63,10 +70,12 @@ export function StepsEditor(props: {
             setSteps((prev) => [
               ...prev,
               {
+                _rowId: createRowId(),
                 key: `d${prev.length + 1}_mm`,
                 label: `D${prev.length + 1} (mm)`,
                 sequence: prev.length + 1,
                 requiresPhoto: true,
+                hotspot: null,
               },
             ])
           }
@@ -93,7 +102,7 @@ export function StepsEditor(props: {
         ) : (
           <div className="divide-y divide-slate-100">
             {steps.map((s, idx) => (
-              <div key={`${s.key}-${idx}`} className="grid grid-cols-12 items-center gap-2 px-4 py-3 text-sm">
+              <div key={s._rowId} className="grid grid-cols-12 items-center gap-2 px-4 py-3 text-sm">
                 <div className="col-span-2">
                   <input
                     type="number"
@@ -201,70 +210,6 @@ export function StepsEditor(props: {
           <div className="mt-3 text-xs text-slate-600">
             If you don’t set this, the mobile screen falls back to individual overlay inputs.
           </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <div className="text-sm font-semibold tracking-tight">Optional: hotspot coordinates (for interactive diagram entry)</div>
-          <div className="mt-1 text-xs text-slate-600">
-            Hotspots can be used to anchor inputs or enable diagram tap-to-select.
-          </div>
-
-          {!props.pdfUrl ? (
-            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
-              Upload a PDF above, save, then come back to set hotspots.
-            </div>
-          ) : steps.length === 0 ? (
-            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
-              Add at least one Level 2 step first.
-            </div>
-          ) : (
-            <div className="mt-4 grid gap-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <label className="text-xs font-semibold text-slate-600">Select step</label>
-                  <select
-                    value={activeKey ?? ''}
-                    onChange={(e) => setActiveKey(e.target.value || null)}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
-                  >
-                    {steps
-                      .slice()
-                      .sort((a, b) => a.sequence - b.sequence)
-                      .map((s) => (
-                        <option key={s.key} value={s.key}>
-                          {s.label} ({s.key})
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!activeKey) return;
-                    setSteps((prev) => prev.map((s) => (s.key === activeKey ? { ...s, hotspot: null } : s)));
-                  }}
-                  className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
-                >
-                  Clear selected hotspot
-                </button>
-              </div>
-
-              <PdfHotspotPicker
-                pdfUrl={props.pdfUrl}
-                overlays={steps.map((s) => ({ key: s.key, label: s.label, hotspot: s.hotspot }))}
-                activeKey={activeKey}
-                onSelectHotspot={(hs) => {
-                  if (!activeKey) return;
-                  setSteps((prev) => prev.map((s) => (s.key === activeKey ? { ...s, hotspot: hs } : s)));
-                }}
-              />
-
-              <div className="text-xs text-slate-600">
-                Tip: set hotspots to cover the D1/D2 label area (or the dimension callout), not the entire diagram.
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

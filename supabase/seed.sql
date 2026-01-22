@@ -15,6 +15,7 @@ set base_price = excluded.base_price,
 insert into public.asset_type_configs (
   asset_type,
   display_name,
+  asset_category,
   min_complexity_level,
   level1_measurement_keys,
   level2_template,
@@ -24,6 +25,7 @@ values
   (
     'straight_pipe',
     'Straight Pipework',
+    'Pipes',
     1,
     array['length_mm','max_diameter_mm','pipe_dn'],
     null,
@@ -32,6 +34,7 @@ values
   (
     'basic_flange',
     'Basic Flange',
+    'Flanges',
     1,
     array['length_mm','max_diameter_mm','flange_od_mm','pipe_dn'],
     null,
@@ -40,6 +43,7 @@ values
   (
     'check_valve',
     'Check Valve',
+    'Valves',
     2,
     array[]::text[],
     jsonb_build_object(
@@ -55,6 +59,7 @@ values
   (
     'y_strainer',
     'Y-Strainer',
+    'Strainers',
     2,
     array[]::text[],
     jsonb_build_object(
@@ -69,6 +74,7 @@ values
   )
 on conflict (asset_type) do update
 set display_name = excluded.display_name,
+  asset_category = excluded.asset_category,
     min_complexity_level = excluded.min_complexity_level,
     level1_measurement_keys = excluded.level1_measurement_keys,
     level2_template = excluded.level2_template,

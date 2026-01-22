@@ -80,8 +80,8 @@ create index if not exists photos_asset_id_idx on public.photos(asset_id);
 create table if not exists public.asset_type_configs (
   asset_type text primary key,
   display_name text not null,
+  asset_category text not null default 'uncategorized',
   min_complexity_level integer not null default 1,
-  requires_cap_end boolean not null default false,
   level1_measurement_keys text[] not null default array[]::text[],
   level2_template jsonb, -- { drawing_url?: string, steps: [{key,label,requiresPhoto}] }
   required_photo_types text[] not null default array[]::text[],
@@ -94,7 +94,7 @@ create table if not exists public.asset_type_configs (
 alter table public.assets add column if not exists cap_end_required boolean not null default false;
 alter table public.assets add column if not exists cap_end_notes text;
 
-alter table public.asset_type_configs add column if not exists requires_cap_end boolean not null default false;
+alter table public.asset_type_configs add column if not exists asset_category text not null default 'uncategorized';
 
 -- Pricing rules (simple and replaceable)
 create table if not exists public.pricing_rules (

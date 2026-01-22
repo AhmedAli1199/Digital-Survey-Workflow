@@ -37,8 +37,8 @@ export type AssetRow = {
 export type AssetTypeConfigRow = {
   asset_type: string;
   display_name: string;
+  asset_category: string;
   min_complexity_level: 1 | 2;
-  requires_cap_end?: boolean;
   level1_measurement_keys: string[];
   level2_template: any | null;
   required_photo_types: string[];
