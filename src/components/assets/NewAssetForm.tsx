@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { AssetTypeConfigRow } from '@/lib/supabase/types';
 import { createAsset } from '@/app/actions/assets';
 import { AssetTypeSelect } from '@/components/assets/AssetTypeSelect';
@@ -8,6 +8,10 @@ import { MeasurementInputs } from '@/components/assets/MeasurementInputs';
 import { Level2Stepper } from '@/components/assets/Level2Stepper';
 import { PhotoInputs, type PhotoField } from '@/components/assets/PhotoInputs';
 import { DiagramViewer } from '@/components/assets/DiagramViewer';
+import { DiagramHotspotViewer } from '@/components/assets/DiagramHotspotViewer';
+import { Level2DiagramEntry } from '@/components/assets/Level2DiagramEntry';
+import { Level2ImageEntry } from '@/components/assets/Level2ImageEntry';
+import { Level2ImageTableEntry } from '@/components/assets/Level2ImageTableEntry';
 
 const CORE_PHOTOS: Array<{ photoType: string; label: string }> = [
   { photoType: 'overall', label: 'Overall asset view' },
@@ -47,9 +51,42 @@ export function NewAssetForm(props: { surveyId: string; configs: AssetTypeConfig
   const level2Steps = Array.isArray(config?.level2_template?.steps) ? config.level2_template.steps : [];
   const hasLevel2Template = level2Steps.length > 0;
   const drawingUrl = typeof config?.level2_template?.drawing_url === 'string' ? config.level2_template.drawing_url : null;
-  const requiresCapEnd = Boolean((config as any)?.requires_cap_end);
+  const drawingImageUrl =
+    typeof (config as any)?.level2_template?.drawing_image_url === 'string'
+      ? ((config as any).level2_template.drawing_image_url as string)
+      : null;
+  const tableRegion = ((config as any)?.level2_template?.table_region ?? null) as any;
+
+  const hasTableRegion = Boolean(
+    drawingImageUrl && tableRegion && typeof tableRegion === 'object' && tableRegion.w > 0 && tableRegion.h > 0,
+  );
 
   const effectiveComplexitySafe: 1 | 2 = effectiveComplexity === 2 && !hasLevel2Template ? 1 : effectiveComplexity;
+
+  const sortedLevel2Steps = useMemo(() => {
+    const arr = (level2Steps ?? []).map((s: any, i: number) => ({
+      ...s,
+      key: String(s?.key ?? i),
+      label: String(s?.label ?? s?.key ?? `Step ${i + 1}`),
+      sequence: typeof s?.sequence === 'number' ? s.sequence : i + 1,
+    }));
+    return arr.sort((a: any, b: any) => (a.sequence ?? 0) - (b.sequence ?? 0));
+  }, [level2Steps]);
+
+  const [activeLevel2Key, setActiveLevel2Key] = useState<string | null>(null);
+  const [capEndRequired, setCapEndRequired] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (effectiveComplexitySafe !== 2) return;
+    if (!sortedLevel2Steps.length) {
+      setActiveLevel2Key(null);
+      return;
+    }
+
+    // Reset active step when asset type/template changes.
+    setActiveLevel2Key(sortedLevel2Steps[0]?.key ?? null);
+  }, [assetType, effectiveComplexitySafe, sortedLevel2Steps]);
+
 
   const corePhotoFields: PhotoField[] = useMemo(() => {
     // Level 1: only a single main photo (overall) is required.
@@ -118,6 +155,7 @@ export function NewAssetForm(props: { surveyId: string; configs: AssetTypeConfig
               value={assetType}
               onChange={(v) => {
                 setAssetType(v);
+                setCapEndRequired(false);
                 const cfg = props.configs.find((c) => c.asset_type === v);
                 if (cfg) {
                   const min = (cfg.min_complexity_level ?? 1) as 1 | 2;
@@ -195,30 +233,82 @@ export function NewAssetForm(props: { surveyId: string; configs: AssetTypeConfig
       </div>
 
       {effectiveComplexitySafe === 2 ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="self-start md:sticky md:top-4">
-            {drawingUrl ? (
-              <DiagramViewer url={drawingUrl} />
-            ) : (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-950">
-                No diagram PDF is configured for this asset type yet.
+        drawingUrl ? (
+          hasTableRegion ? (
+            <Level2ImageTableEntry
+              imageUrl={drawingImageUrl as string}
+              pdfUrl={drawingUrl}
+              steps={sortedLevel2Steps as any}
+              tableRegion={tableRegion}
+            />
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="self-start md:sticky md:top-4">
+                {/* Mobile: enter values directly on the diagram */}
+                <div className="md:hidden">
+                  {drawingImageUrl ? (
+                    <Level2ImageEntry imageUrl={drawingImageUrl} pdfUrl={drawingUrl} steps={sortedLevel2Steps as any} />
+                  ) : (
+                    <Level2DiagramEntry url={drawingUrl} steps={sortedLevel2Steps as any} />
+                  )}
+                </div>
+
+                {/* Desktop/tablet: diagram click-to-focus + step list */}
+                <div className="hidden md:block">
+                  <DiagramHotspotViewer
+                    url={drawingUrl}
+                    steps={sortedLevel2Steps as any}
+                    activeKey={activeLevel2Key}
+                    onSelectKey={(k) => {
+                      setActiveLevel2Key(k);
+                      // Defensive: if focusing fails for any reason, still attempt scroll.
+                      const el = document.getElementById(`l2_${k}`);
+                      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      (el as HTMLInputElement | null)?.focus?.();
+                    }}
+                  />
+                </div>
               </div>
-            )}
+              <div className="min-w-0">
+                {/* Keep the stepper on larger screens; mobile uses the diagram overlay inputs. */}
+                <div className="hidden md:block">
+                  <Level2Stepper
+                    steps={sortedLevel2Steps as any}
+                    activeKey={activeLevel2Key}
+                    onActiveKeyChange={(k: string) => setActiveLevel2Key(k)}
+                  />
+                </div>
+              </div>
+            </div>
+          )
+        ) : (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-950">
+            No diagram PDF is configured for this asset type yet.
           </div>
-          <div className="min-w-0">
-            <Level2Stepper steps={level2Steps} />
-          </div>
-        </div>
+        )
       ) : (
         <MeasurementInputs title="Measurements (Level 1)" measurementKeys={level1Keys} />
       )}
 
-      {requiresCapEnd ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <div className="text-sm font-semibold tracking-tight">Cap end</div>
-          <div className="mt-1 text-xs text-slate-500">
-            This asset type requires a cap end. Add any notes to help the workshop team.
-          </div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="text-sm font-semibold tracking-tight">Cap end</div>
+        <div className="mt-1 text-xs text-slate-500">Set this per asset (not per template). Add notes only if needed.</div>
+        <div className="mt-4 flex items-center gap-2">
+          <input
+            id="cap_end_required"
+            type="checkbox"
+            name="cap_end_required"
+            value="true"
+            checked={capEndRequired}
+            onChange={(e) => setCapEndRequired(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300"
+          />
+          <label htmlFor="cap_end_required" className="text-sm font-medium text-slate-900">
+            Cap end required
+          </label>
+        </div>
+
+        {capEndRequired ? (
           <div className="mt-4">
             <label className="text-xs font-semibold text-slate-600">Cap end notes</label>
             <textarea
@@ -227,8 +317,8 @@ export function NewAssetForm(props: { surveyId: string; configs: AssetTypeConfig
               placeholder="e.g., Cap end needed on outlet side; match DN; include gasket..."
             />
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
       <PhotoInputs
         title={effectiveComplexitySafe === 1 ? 'Main photo' : 'Mandatory photos'}

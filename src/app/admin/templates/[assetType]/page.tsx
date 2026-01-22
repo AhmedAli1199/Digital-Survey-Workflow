@@ -30,6 +30,8 @@ export default async function TemplateAdminEdit(props: { params: Promise<{ asset
     ? (cfg as any).level2_template.steps
     : [];
   const drawingUrl = (cfg as any).level2_template?.drawing_url as string | undefined;
+  const drawingImageUrl = (cfg as any).level2_template?.drawing_image_url as string | undefined;
+  const tableRegion = ((cfg as any).level2_template?.table_region ?? null) as any;
 
   return (
     <div className="grid gap-6">
@@ -82,21 +84,6 @@ export default async function TemplateAdminEdit(props: { params: Promise<{ asset
                 <option value="1">Level 1</option>
                 <option value="2">Level 2</option>
               </select>
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="flex items-center gap-3 text-xs font-semibold text-slate-600">
-                <input
-                  type="checkbox"
-                  name="requires_cap_end"
-                  defaultChecked={Boolean((cfg as any).requires_cap_end)}
-                  className="h-4 w-4"
-                />
-                Requires cap end
-              </label>
-              <div className="mt-1 text-xs text-slate-500">
-                When enabled, surveyors will see a cap-end notes box when adding this asset.
-              </div>
             </div>
 
             <div className="md:col-span-2">
@@ -158,9 +145,50 @@ export default async function TemplateAdminEdit(props: { params: Promise<{ asset
               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
             />
           </div>
+
+          <div className="mt-6 border-t border-slate-200 pt-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold tracking-tight">Mobile diagram (image)</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Optional but recommended. Using an image on mobile avoids PDF flicker and loads much faster.
+                </div>
+              </div>
+              {drawingImageUrl ? (
+                <a
+                  href={drawingImageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
+                >
+                  View current image
+                </a>
+              ) : (
+                <span className="text-xs text-slate-500">No image uploaded</span>
+              )}
+            </div>
+
+            <div className="mt-4">
+              <label className="text-xs font-semibold text-slate-600">Upload PNG/JPG</label>
+              <input
+                type="file"
+                accept="image/png,image/jpeg"
+                name="diagram_image"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
+              />
+              <div className="mt-1 text-xs text-slate-500">
+                Tip: export page 1 of the PDF as an image at ~1500–2500px wide.
+              </div>
+            </div>
+          </div>
         </div>
 
-        <StepsEditor initialSteps={level2Steps as any} />
+        <StepsEditor
+          initialSteps={level2Steps as any}
+          pdfUrl={drawingUrl ?? null}
+          imageUrl={drawingImageUrl ?? null}
+          initialTableRegion={tableRegion}
+        />
 
         <div className="flex flex-wrap gap-3">
           <button

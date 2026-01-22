@@ -8,6 +8,10 @@ function isFile(value: unknown): value is File {
   return typeof File !== 'undefined' && value instanceof File;
 }
 
+function isSupportedImageType(mime: string) {
+  return mime === 'image/png' || mime === 'image/jpeg';
+}
+
 function safeName(value: string): string {
   return value
     .trim()
@@ -22,10 +26,10 @@ const updateSchema = z.object({
   asset_type: z.string().min(1),
   display_name: z.string().min(1),
   min_complexity_level: z.coerce.number().int().min(1).max(2),
-  requires_cap_end: z.coerce.boolean().default(false),
   level1_measurement_keys: z.string().optional(),
   required_photo_types: z.string().optional(),
   level2_steps_json: z.string().optional(),
+  level2_table_region_json: z.string().optional(),
 });
 
 export async function updateAssetTemplate(formData: FormData) {
@@ -33,10 +37,10 @@ export async function updateAssetTemplate(formData: FormData) {
     asset_type: String(formData.get('asset_type') ?? ''),
     display_name: String(formData.get('display_name') ?? ''),
     min_complexity_level: formData.get('min_complexity_level') ?? '1',
-    requires_cap_end: formData.get('requires_cap_end') ? true : false,
     level1_measurement_keys: String(formData.get('level1_measurement_keys') ?? ''),
     required_photo_types: String(formData.get('required_photo_types') ?? ''),
     level2_steps_json: String(formData.get('level2_steps_json') ?? ''),
+    level2_table_region_json: String(formData.get('level2_table_region_json') ?? ''),
   });
 
   if (!parsed.success) throw new Error('Invalid template input');
@@ -71,16 +75,65 @@ export async function updateAssetTemplate(formData: FormData) {
       const decoded = JSON.parse(parsed.data.level2_steps_json);
       if (!Array.isArray(decoded)) throw new Error('Steps must be an array');
       steps = decoded
-        .map((s) => ({
-          key: String(s.key ?? ''),
-          label: String(s.label ?? ''),
-          sequence: Number(s.sequence ?? 0),
-          requiresPhoto: Boolean(s.requiresPhoto),
-        }))
+        .map((s) => {
+          const rawHotspot = (s as any).hotspot;
+          const hotspot =
+            rawHotspot &&
+            typeof rawHotspot === 'object' &&
+            Number.isFinite(Number(rawHotspot.x)) &&
+            Number.isFinite(Number(rawHotspot.y)) &&
+            Number.isFinite(Number(rawHotspot.w)) &&
+            Number.isFinite(Number(rawHotspot.h))
+              ? {
+                  x: Number(rawHotspot.x),
+                  y: Number(rawHotspot.y),
+                  w: Number(rawHotspot.w),
+                  h: Number(rawHotspot.h),
+                }
+              : null;
+
+          return {
+            key: String(s.key ?? ''),
+            label: String(s.label ?? ''),
+            sequence: Number(s.sequence ?? 0),
+            requiresPhoto: Boolean(s.requiresPhoto),
+            hotspot,
+          };
+        })
         .filter((s) => s.key && s.label && Number.isFinite(s.sequence))
         .sort((a, b) => a.sequence - b.sequence);
     } catch {
       throw new Error('Invalid steps JSON');
+    }
+  }
+
+  // Optional table region (normalized rect)
+  let tableRegion: any | null = (existing as any).level2_template?.table_region ?? null;
+  if (parsed.data.level2_table_region_json && parsed.data.level2_table_region_json.trim() !== '') {
+    try {
+      const decoded = JSON.parse(parsed.data.level2_table_region_json);
+      if (decoded == null) {
+        tableRegion = null;
+      } else if (
+        typeof decoded === 'object' &&
+        Number.isFinite(Number((decoded as any).x)) &&
+        Number.isFinite(Number((decoded as any).y)) &&
+        Number.isFinite(Number((decoded as any).w)) &&
+        Number.isFinite(Number((decoded as any).h))
+      ) {
+        const r = {
+          x: Number((decoded as any).x),
+          y: Number((decoded as any).y),
+          w: Number((decoded as any).w),
+          h: Number((decoded as any).h),
+        };
+        // Treat empty as cleared
+        tableRegion = r.w <= 0 || r.h <= 0 ? null : r;
+      } else {
+        throw new Error('Invalid table region');
+      }
+    } catch {
+      throw new Error('Invalid table region JSON');
     }
   }
 
@@ -89,6 +142,10 @@ export async function updateAssetTemplate(formData: FormData) {
   // Optional PDF upload
   const pdf = formData.get('diagram_pdf');
   let drawingUrl: string | null = (existing as any).level2_template?.drawing_url ?? null;
+
+  // Optional image upload (recommended for mobile)
+  const image = formData.get('diagram_image');
+  let drawingImageUrl: string | null = (existing as any).level2_template?.drawing_image_url ?? null;
 
   if (isFile(pdf) && pdf.size > 0) {
     if (pdf.type !== 'application/pdf') {
@@ -110,9 +167,32 @@ export async function updateAssetTemplate(formData: FormData) {
     drawingUrl = publicData?.publicUrl ?? null;
   }
 
+  if (isFile(image) && image.size > 0) {
+    if (!isSupportedImageType(image.type)) {
+      throw new Error('Diagram image must be PNG or JPG');
+    }
+
+    const ext = image.type === 'image/png' ? 'png' : 'jpg';
+    const fileName = safeName(image.name || `${parsed.data.asset_type}.${ext}`);
+    const path = `diagrams/${parsed.data.asset_type}/${Date.now()}-${fileName}`;
+    const bytes = new Uint8Array(await image.arrayBuffer());
+
+    const { error: uploadError } = await supabase.storage.from(diagramsBucket).upload(path, bytes, {
+      contentType: image.type,
+      upsert: true,
+    });
+
+    if (uploadError) throw new Error(uploadError.message);
+
+    const { data: publicData } = supabase.storage.from(diagramsBucket).getPublicUrl(path);
+    drawingImageUrl = publicData?.publicUrl ?? null;
+  }
+
   const nextLevel2Template = {
     ...(existing as any).level2_template,
     drawing_url: drawingUrl,
+    drawing_image_url: drawingImageUrl,
+    table_region: tableRegion,
     steps,
   };
 
@@ -121,7 +201,6 @@ export async function updateAssetTemplate(formData: FormData) {
     .update({
       display_name: parsed.data.display_name,
       min_complexity_level: parsed.data.min_complexity_level,
-      requires_cap_end: parsed.data.requires_cap_end,
       level1_measurement_keys: level1Keys,
       required_photo_types: requiredPhotos,
       level2_template: nextLevel2Template,
@@ -129,10 +208,6 @@ export async function updateAssetTemplate(formData: FormData) {
     .eq('asset_type', parsed.data.asset_type);
 
   if (updateErr) {
-    // Helpful message if DB hasn't been migrated yet.
-    if ((updateErr.message || '').includes('requires_cap_end')) {
-      throw new Error('Template update failed: requires_cap_end column is missing. Apply the schema migration in supabase/schema.sql.');
-    }
     throw new Error(updateErr.message);
   }
 

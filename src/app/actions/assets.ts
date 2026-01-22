@@ -47,10 +47,16 @@ const createAssetSchema = z.object({
   obstruction_type: z.string().optional(),
   obstruction_offset_mm: z.coerce.number().optional(),
   obstruction_notes: z.string().optional(),
+  cap_end_required: z.boolean().default(false),
   cap_end_notes: z.string().optional(),
 });
 
 export async function createAsset(formData: FormData) {
+  const capEndRequired = formData
+    .getAll('cap_end_required')
+    .map((v) => String(v))
+    .some((v) => v === 'true' || v === 'on' || v === '1');
+
   const raw = {
     survey_id: String(formData.get('survey_id') ?? ''),
     asset_tag: String(formData.get('asset_tag') ?? ''),
@@ -63,6 +69,7 @@ export async function createAsset(formData: FormData) {
     obstruction_type: String(formData.get('obstruction_type') ?? ''),
     obstruction_offset_mm: formData.get('obstruction_offset_mm') || undefined,
     obstruction_notes: String(formData.get('obstruction_notes') ?? ''),
+    cap_end_required: capEndRequired,
     cap_end_notes: String(formData.get('cap_end_notes') ?? ''),
   };
 
@@ -84,7 +91,6 @@ export async function createAsset(formData: FormData) {
   const requestedComplexity = Number(parsed.data.complexity_level);
   const complexity = Math.max(minComplexity, requestedComplexity);
 
-  const requiresCapEnd = Boolean((config as any).requires_cap_end);
   const capEndNotes = parsed.data.cap_end_notes?.trim() ? parsed.data.cap_end_notes.trim() : null;
 
   const baseInsert = {
@@ -106,8 +112,8 @@ export async function createAsset(formData: FormData) {
 
   const insertWithCapEnd = {
     ...baseInsert,
-    cap_end_required: requiresCapEnd,
-    cap_end_notes: requiresCapEnd ? capEndNotes : null,
+    cap_end_required: parsed.data.cap_end_required,
+    cap_end_notes: parsed.data.cap_end_required ? capEndNotes : null,
   };
 
   let insertAttempt = await supabase.from('assets').insert(insertWithCapEnd).select('id').single();

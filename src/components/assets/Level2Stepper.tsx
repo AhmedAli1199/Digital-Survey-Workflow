@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 type Step = {
   key: string;
@@ -9,7 +9,11 @@ type Step = {
   sequence?: number;
 };
 
-export function Level2Stepper(props: { steps: Step[] }) {
+export function Level2Stepper(props: {
+  steps: Step[];
+  activeKey?: string | null;
+  onActiveKeyChange?: (key: string) => void;
+}) {
   const steps = useMemo(() => {
     const normalized = props.steps.map((s, i) => ({
       key: String(s.key),
@@ -20,7 +24,28 @@ export function Level2Stepper(props: { steps: Step[] }) {
     return normalized.sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
   }, [props.steps]);
 
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [uncontrolledIndex, setUncontrolledIndex] = useState(0);
+
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const controlledKey = props.activeKey;
+  const onActiveKeyChange = props.onActiveKeyChange;
+
+  const currentIndex = useMemo(() => {
+    if (!controlledKey) return uncontrolledIndex;
+    const idx = steps.findIndex((s) => s.key === controlledKey);
+    return idx >= 0 ? idx : uncontrolledIndex;
+  }, [controlledKey, steps, uncontrolledIndex]);
+
+  useEffect(() => {
+    if (!controlledKey) return;
+    const el = inputRefs.current[controlledKey];
+    if (!el) return;
+    // Focus + bring into view when selected from the diagram.
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Small timeout helps when layout is still settling.
+    setTimeout(() => el.focus(), 50);
+  }, [controlledKey]);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6">
@@ -39,11 +64,12 @@ export function Level2Stepper(props: { steps: Step[] }) {
       <div className="mt-4 grid gap-3">
         {steps.map((s, idx) => {
           const enabled = idx <= currentIndex;
+          const active = controlledKey ? s.key === controlledKey : idx === currentIndex;
           return (
             <div
               key={s.key}
               className={`rounded-xl border px-4 py-3 ${
-                idx === currentIndex
+                active
                   ? 'border-slate-300 bg-slate-50'
                   : enabled
                     ? 'border-slate-200 bg-white'
@@ -66,15 +92,27 @@ export function Level2Stepper(props: { steps: Step[] }) {
               <div className="mt-3">
                 <label className="text-xs font-semibold text-slate-600">Value (mm) *</label>
                 <input
+                  id={`l2_${s.key}`}
                   name={`m_${s.key}`}
                   inputMode="decimal"
                   className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
                   placeholder="e.g., 450"
-                  required={idx === currentIndex}
+                  required={active}
                   disabled={!enabled}
+                  ref={(el) => {
+                    inputRefs.current[s.key] = el;
+                  }}
+                  onFocus={() => {
+                    if (onActiveKeyChange) onActiveKeyChange(s.key);
+                  }}
                   onBlur={() => {
-                    if (idx === currentIndex) {
-                      setCurrentIndex((prev) => Math.min(prev + 1, steps.length - 1));
+                    if (!active) return;
+                    const nextIdx = Math.min(idx + 1, steps.length - 1);
+                    const nextKey = steps[nextIdx]?.key;
+                    if (onActiveKeyChange && nextKey) {
+                      onActiveKeyChange(nextKey);
+                    } else {
+                      setUncontrolledIndex(nextIdx);
                     }
                   }}
                 />

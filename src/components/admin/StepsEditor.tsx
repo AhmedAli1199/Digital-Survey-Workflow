@@ -1,12 +1,17 @@
+
 'use client';
 
 import { useMemo, useState } from 'react';
+import { PdfHotspotPicker } from '@/components/admin/PdfHotspotPicker';
+import type { NormalizedHotspot } from '@/components/admin/PdfHotspotPickerTypes';
+import { ImageRegionPicker, type NormalizedRect } from '@/components/admin/ImageRegionPicker';
 
 export type TemplateStep = {
   key: string;
   label: string;
   sequence: number;
   requiresPhoto: boolean;
+  hotspot?: NormalizedHotspot | null;
 };
 
 function normalizeKey(value: string) {
@@ -17,7 +22,12 @@ function normalizeKey(value: string) {
     .replace(/[^a-z0-9_]/g, '');
 }
 
-export function StepsEditor(props: { initialSteps: TemplateStep[] }) {
+export function StepsEditor(props: {
+  initialSteps: TemplateStep[];
+  pdfUrl?: string | null;
+  imageUrl?: string | null;
+  initialTableRegion?: NormalizedRect | null;
+}) {
   const [steps, setSteps] = useState<TemplateStep[]>(() => {
     const base = props.initialSteps?.length ? props.initialSteps : [];
     return base
@@ -26,11 +36,17 @@ export function StepsEditor(props: { initialSteps: TemplateStep[] }) {
         label: String(s.label ?? ''),
         sequence: Number(s.sequence ?? idx + 1),
         requiresPhoto: Boolean(s.requiresPhoto),
+        hotspot: (s as any).hotspot ?? null,
       }))
       .sort((a, b) => a.sequence - b.sequence);
   });
 
+  const [activeKey, setActiveKey] = useState<string | null>(() => (steps[0]?.key ? steps[0].key : null));
+
+  const [tableRegion, setTableRegion] = useState<NormalizedRect | null>(() => props.initialTableRegion ?? null);
+
   const json = useMemo(() => JSON.stringify(steps), [steps]);
+  const tableRegionJson = useMemo(() => JSON.stringify(tableRegion), [tableRegion]);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6">
@@ -61,6 +77,7 @@ export function StepsEditor(props: { initialSteps: TemplateStep[] }) {
       </div>
 
       <input type="hidden" name="level2_steps_json" value={json} />
+      <input type="hidden" name="level2_table_region_json" value={tableRegionJson} />
 
       <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
         <div className="grid grid-cols-12 gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
@@ -146,6 +163,109 @@ export function StepsEditor(props: { initialSteps: TemplateStep[] }) {
 
       <div className="mt-3 text-xs text-slate-500">
         Note: “Key” is the stored identifier (recommended: d1_mm, d2_mm, etc.).
+      </div>
+
+      <div className="mt-6 grid gap-6">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="text-sm font-semibold tracking-tight">Mobile: input table region (recommended)</div>
+          <div className="mt-1 text-xs text-slate-600">
+            Drag a large rectangle where you want the mobile input table to appear (usually a blank area on the right of the diagram).
+          </div>
+
+          {!props.imageUrl ? (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
+              Upload a diagram image above, save, then come back to set the table region.
+            </div>
+          ) : steps.length === 0 ? (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
+              Add at least one Level 2 step first.
+            </div>
+          ) : (
+            <div className="mt-4">
+              <ImageRegionPicker
+                imageUrl={props.imageUrl}
+                value={tableRegion}
+                title="Input table region"
+                description="Select a big blank area. The app will render a clean table there listing all steps in order."
+                onChange={(r) => {
+                  if (r.w === 0 || r.h === 0) {
+                    setTableRegion(null);
+                  } else {
+                    setTableRegion(r);
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          <div className="mt-3 text-xs text-slate-600">
+            If you don’t set this, the mobile screen falls back to individual overlay inputs.
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="text-sm font-semibold tracking-tight">Optional: hotspot coordinates (for interactive diagram entry)</div>
+          <div className="mt-1 text-xs text-slate-600">
+            Hotspots can be used to anchor inputs or enable diagram tap-to-select.
+          </div>
+
+          {!props.pdfUrl ? (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
+              Upload a PDF above, save, then come back to set hotspots.
+            </div>
+          ) : steps.length === 0 ? (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
+              Add at least one Level 2 step first.
+            </div>
+          ) : (
+            <div className="mt-4 grid gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-semibold text-slate-600">Select step</label>
+                  <select
+                    value={activeKey ?? ''}
+                    onChange={(e) => setActiveKey(e.target.value || null)}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
+                  >
+                    {steps
+                      .slice()
+                      .sort((a, b) => a.sequence - b.sequence)
+                      .map((s) => (
+                        <option key={s.key} value={s.key}>
+                          {s.label} ({s.key})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!activeKey) return;
+                    setSteps((prev) => prev.map((s) => (s.key === activeKey ? { ...s, hotspot: null } : s)));
+                  }}
+                  className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
+                >
+                  Clear selected hotspot
+                </button>
+              </div>
+
+              <PdfHotspotPicker
+                pdfUrl={props.pdfUrl}
+                overlays={steps.map((s) => ({ key: s.key, label: s.label, hotspot: s.hotspot }))}
+                activeKey={activeKey}
+                onSelectHotspot={(hs) => {
+                  if (!activeKey) return;
+                  setSteps((prev) => prev.map((s) => (s.key === activeKey ? { ...s, hotspot: hs } : s)));
+                }}
+              />
+
+              <div className="text-xs text-slate-600">
+                Tip: set hotspots to cover the D1/D2 label area (or the dimension callout), not the entire diagram.
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
