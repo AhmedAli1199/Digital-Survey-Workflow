@@ -35,6 +35,16 @@ function safeSegment(value: string): string {
     .slice(0, 80);
 }
 
+function parseDataUrlPng(dataUrl: string): Uint8Array {
+  const trimmed = String(dataUrl ?? '').trim();
+  if (!trimmed) throw new Error('Empty sketch');
+  const m = trimmed.match(/^data:(image\/png);base64,(.+)$/i);
+  if (!m) throw new Error('Invalid sketch image format');
+  const base64 = m[2] ?? '';
+  const buf = Buffer.from(base64, 'base64');
+  return new Uint8Array(buf);
+}
+
 const createAssetSchema = z.object({
   survey_id: z.string().uuid(),
   asset_tag: z.string().min(1),
@@ -219,7 +229,14 @@ export async function createAsset(formData: FormData) {
   const surveySeg = safeSegment(parsed.data.survey_id);
   const assetSeg = safeSegment(asset.id);
 
-  const rowsToUpsert: Array<{ asset_id: string; photo_type: string; storage_path: string; public_url: string | null }> = [];
+  const rowsToUpsert: Array<{
+    asset_id: string;
+    photo_type: string;
+    kind?: string;
+    storage_path: string;
+    public_url: string | null;
+    meta?: any;
+  }> = [];
 
   for (const p of photoTypes) {
     const file = requireFile(formData, p.input, p.label);
@@ -238,14 +255,66 @@ export async function createAsset(formData: FormData) {
     if (uploadError) throw new Error(uploadError.message);
 
     const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(path);
-    rowsToUpsert.push({ asset_id: asset.id, photo_type: p.photo_type, storage_path: path, public_url: publicData?.publicUrl ?? null });
+    rowsToUpsert.push({
+      asset_id: asset.id,
+      photo_type: p.photo_type,
+      kind: 'photo',
+      storage_path: path,
+      public_url: publicData?.publicUrl ?? null,
+    });
   }
 
-  const { error: photosError } = await supabase
-    .from('photos')
-    .upsert(rowsToUpsert, { onConflict: 'asset_id,photo_type' });
+  // Optional sketch (PNG data URL + optional JSON doc for future editing)
+  const sketchPngDataUrl = String(formData.get('sketch_png_data_url') ?? '').trim();
+  const sketchDocJson = String(formData.get('sketch_doc_json') ?? '').trim();
+  if (sketchPngDataUrl) {
+    const bytes = parseDataUrlPng(sketchPngDataUrl);
+    if (bytes.byteLength > 6 * 1024 * 1024) {
+      throw new Error('Sketch too large (max 6MB)');
+    }
 
-  if (photosError) throw new Error(photosError.message);
+    const path = `surveys/${surveySeg}/assets/${assetSeg}/sketch-${now.getTime()}.png`;
+    const { error: uploadError } = await supabase.storage.from(bucket).upload(path, bytes, {
+      contentType: 'image/png',
+      upsert: true,
+    });
+    if (uploadError) throw new Error(uploadError.message);
+
+    const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(path);
+
+    let meta: any = undefined;
+    if (sketchDocJson) {
+      try {
+        meta = { doc: JSON.parse(sketchDocJson), version: 1 };
+      } catch {
+        // If malformed, ignore doc but still save the PNG.
+        meta = { version: 1 };
+      }
+    } else {
+      meta = { version: 1 };
+    }
+
+    rowsToUpsert.push({
+      asset_id: asset.id,
+      photo_type: 'sketch',
+      kind: 'sketch',
+      storage_path: path,
+      public_url: publicData?.publicUrl ?? null,
+      meta,
+    });
+  }
+
+  let photosAttempt = await supabase.from('photos').upsert(rowsToUpsert as any, { onConflict: 'asset_id,photo_type' });
+  if (photosAttempt.error) {
+    const msg = photosAttempt.error.message || '';
+    // Backwards compatibility: if DB hasn't been migrated with kind/meta columns, retry without them.
+    if (msg.includes('kind') || msg.includes('meta')) {
+      const fallbackRows = rowsToUpsert.map(({ kind: _k, meta: _m, ...rest }) => rest);
+      photosAttempt = await supabase.from('photos').upsert(fallbackRows as any, { onConflict: 'asset_id,photo_type' });
+    }
+  }
+
+  if (photosAttempt.error) throw new Error(photosAttempt.error.message);
 
   redirect(`/surveys/${parsed.data.survey_id}`);
 }

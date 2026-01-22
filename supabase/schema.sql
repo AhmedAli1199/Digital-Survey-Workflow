@@ -68,8 +68,10 @@ create table if not exists public.photos (
   id uuid primary key default gen_random_uuid(),
   asset_id uuid not null references public.assets(id) on delete cascade,
   photo_type text not null,   -- overall | side | connection | tape_length | tape_diameter | obstruction_wide | obstruction_close | dim_a | ...
+  kind text not null default 'photo', -- photo | sketch | markup
   storage_path text not null, -- path in bucket
   public_url text,
+  meta jsonb,
   created_at timestamptz not null default now(),
 
   constraint photos_asset_type_unique unique (asset_id, photo_type)
@@ -95,6 +97,9 @@ alter table public.assets add column if not exists cap_end_required boolean not 
 alter table public.assets add column if not exists cap_end_notes text;
 
 alter table public.asset_type_configs add column if not exists asset_category text not null default 'uncategorized';
+
+alter table public.photos add column if not exists kind text not null default 'photo';
+alter table public.photos add column if not exists meta jsonb;
 
 -- Pricing rules (simple and replaceable)
 create table if not exists public.pricing_rules (

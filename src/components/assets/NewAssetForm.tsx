@@ -12,6 +12,7 @@ import { DiagramHotspotViewer } from '@/components/assets/DiagramHotspotViewer';
 import { Level2DiagramEntry } from '@/components/assets/Level2DiagramEntry';
 import { Level2ImageEntry } from '@/components/assets/Level2ImageEntry';
 import { Level2ImageTableEntry } from '@/components/assets/Level2ImageTableEntry';
+import { SketchPadSection } from '@/components/sketch/SketchPadSection';
 
 const CORE_PHOTOS: Array<{ photoType: string; label: string }> = [
   { photoType: 'overall', label: 'Overall asset view' },
@@ -437,6 +438,8 @@ export function NewAssetForm(props: { surveyId: string; configs: AssetTypeConfig
       </div>
 
       {obstructionPresent ? <PhotoInputs title="Obstruction photos" fields={obstructionFields} /> : null}
+
+      <SketchPadSection />
 
       <div className="flex flex-wrap gap-3">
         <button
