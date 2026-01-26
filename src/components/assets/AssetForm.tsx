@@ -121,7 +121,7 @@ export function AssetForm(props: {
       sequence: typeof s?.sequence === 'number' ? s.sequence : i + 1,
     }));
     return arr.sort((a: any, b: any) => (a.sequence ?? 0) - (b.sequence ?? 0));
-  }, [level2Steps]);
+  }, [level2Steps]) as Array<{ key: string; label: string; sequence: number; [key: string]: any }>; // Explicit cast to fix implicit any
 
   // Initial measurements map
   const initialMeasurements = useMemo(() => {

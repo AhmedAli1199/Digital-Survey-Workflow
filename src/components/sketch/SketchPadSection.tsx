@@ -3,16 +3,25 @@
 import { useMemo, useState } from 'react';
 import { SketchPadModal } from '@/components/sketch/SketchPadModal';
 
-export function SketchPadSection(props: { title?: string; initialDocJson?: string | null }) {
+export function SketchPadSection(props: {
+  title?: string;
+  initialDocJson?: string | null;
+  existingSketchUrl?: string | null;
+}) {
   const [open, setOpen] = useState(false);
   const [pngDataUrl, setPngDataUrl] = useState<string>('');
   const [docJson, setDocJson] = useState<string>(props.initialDocJson ?? '');
 
-  const hasSketch = Boolean(pngDataUrl);
+  // "hasLocalChange" means user just drew something
+  const hasLocalChange = Boolean(pngDataUrl);
+  // "hasExisting" means there was a sketch saved previously
+  const hasExisting = Boolean(props.existingSketchUrl);
+  
+  // Overall sketch state for UI toggles
+  const hasSketch = hasLocalChange || hasExisting;
 
   const approxSize = useMemo(() => {
     if (!pngDataUrl) return null;
-    // Roughly estimate bytes of base64 payload
     const m = pngDataUrl.match(/base64,(.+)$/);
     if (!m) return null;
     const b64 = m[1] ?? '';
@@ -46,7 +55,7 @@ export function SketchPadSection(props: { title?: string; initialDocJson?: strin
               }}
               className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
             >
-              Remove
+              Start over
             </button>
           ) : null}
         </div>
@@ -55,13 +64,20 @@ export function SketchPadSection(props: { title?: string; initialDocJson?: strin
       <input type="hidden" name="sketch_png_data_url" value={pngDataUrl} />
       <input type="hidden" name="sketch_doc_json" value={docJson} />
 
-      {hasSketch ? (
+      {pngDataUrl ? (
         <div className="mt-4">
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
             <img src={pngDataUrl} alt="Sketch preview" className="h-auto w-full" />
           </div>
           <div className="mt-2 text-xs text-slate-500">
-            Saved with this asset{approxSize ? ` (~${Math.round(approxSize / 1024)}KB)` : ''}.
+            New sketch ready to save{approxSize ? ` (~${Math.round(approxSize / 1024)}KB)` : ''}.
+          </div>
+        </div>
+      ) : props.existingSketchUrl ? (
+        <div className="mt-4">
+           <div className="text-xs font-semibold text-slate-500 mb-2">Current saved sketch:</div>
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+            <img src={props.existingSketchUrl} alt="Current sketch" className="h-auto w-full" />
           </div>
         </div>
       ) : (
@@ -73,7 +89,7 @@ export function SketchPadSection(props: { title?: string; initialDocJson?: strin
       <SketchPadModal
         open={open}
         title="Scratch pad"
-        initialDocJson={docJson}
+        initialDocJson={docJson || props.initialDocJson}
         onClose={() => setOpen(false)}
         onSave={({ pngDataUrl, docJson }) => {
           setPngDataUrl(pngDataUrl);
