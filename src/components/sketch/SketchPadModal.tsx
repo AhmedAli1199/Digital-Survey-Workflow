@@ -622,6 +622,20 @@ export function SketchPadModal(props: {
                 >
                   Redo
                 </button>
+                {selectedId && shapes.find((s) => s.id === selectedId)?.type === 'text' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const s = shapes.find((k) => k.id === selectedId) as TextShape | undefined;
+                      if (!s) return;
+                      setEditingTextId(s.id);
+                      setEditingTextValue(s.text);
+                    }}
+                    className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-200"
+                  >
+                    Edit Text
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={deleteSelected}
@@ -793,12 +807,12 @@ export function SketchPadModal(props: {
             </Stage>
 
             {editingTextId ? (
-              <div className="pointer-events-auto absolute inset-x-0 bottom-0 border-t border-slate-200 bg-white p-3">
+              <div className="pointer-events-auto fixed left-4 right-4 top-[20%] z-[100] rounded-xl border border-slate-300 bg-white p-4 shadow-2xl md:absolute md:inset-x-auto md:bottom-8 md:left-1/2 md:top-auto md:w-96 md:-translate-x-1/2">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs font-semibold text-slate-600">Edit text</div>
+                  <div className="text-sm font-semibold text-slate-900">Edit Text</div>
                   <button
                     type="button"
-                    className="text-xs font-semibold text-slate-700 underline decoration-slate-200 underline-offset-4 hover:decoration-slate-700"
+                    className="text-xs font-semibold text-slate-500 hover:text-slate-800"
                     onClick={() => {
                       setEditingTextId(null);
                       setEditingTextValue('');
@@ -808,13 +822,23 @@ export function SketchPadModal(props: {
                   </button>
                 </div>
                 <textarea
+                  autoFocus
+                  ref={(n) => {
+                    if (n) {
+                      // Force focus on mount for mobile keyboards
+                      setTimeout(() => {
+                        n.focus();
+                        n.setSelectionRange(n.value.length, n.value.length);
+                      }, 50);
+                    }
+                  }}
                   value={editingTextValue}
                   onChange={(e) => setEditingTextValue(e.target.value)}
-                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
-                  rows={2}
+                  className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-base text-slate-900 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
+                  rows={3}
                   placeholder="Type dimensions/notes..."
                 />
-                <div className="mt-2 flex items-center justify-end gap-2">
+                <div className="mt-3 flex items-center justify-end">
                   <button
                     type="button"
                     onClick={() => {
@@ -825,9 +849,9 @@ export function SketchPadModal(props: {
                       setEditingTextId(null);
                       setEditingTextValue('');
                     }}
-                    className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                   >
-                    Apply
+                    Apply Change
                   </button>
                 </div>
               </div>

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { AssetTypeConfigRow, SurveyRow } from '@/lib/supabase/types';
-import { NewAssetForm } from '@/components/assets/NewAssetForm';
+import { AssetForm } from '@/components/assets/AssetForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,7 +56,7 @@ export default async function NewAssetPage(props: { params: Promise<{ id: string
         </Link>
       </div>
 
-      <NewAssetForm surveyId={surveyId} configs={configs} />
+      <AssetForm surveyId={surveyId} configs={configs} />
     </div>
   );
 }

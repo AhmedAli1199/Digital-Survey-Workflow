@@ -318,3 +318,285 @@ export async function createAsset(formData: FormData) {
 
   redirect(`/surveys/${parsed.data.survey_id}`);
 }
+
+const updateAssetSchema = createAssetSchema.omit({ survey_id: true }).extend({
+  asset_id: z.string().uuid(),
+});
+
+export async function updateAsset(formData: FormData) {
+  const capEndRequired = formData
+    .getAll('cap_end_required')
+    .map((v) => String(v))
+    .some((v) => v === 'true' || v === 'on' || v === '1');
+
+  const raw = {
+    asset_id: String(formData.get('asset_id') ?? ''),
+    asset_tag: String(formData.get('asset_tag') ?? ''),
+    asset_type: String(formData.get('asset_type') ?? ''),
+    quantity: formData.get('quantity') ?? '1',
+    location_area: String(formData.get('location_area') ?? ''),
+    service: String(formData.get('service') ?? ''),
+    complexity_level: formData.get('complexity_level') ?? '1',
+    obstruction_present: String(formData.get('obstruction_present') ?? 'false') === 'true',
+    obstruction_type: String(formData.get('obstruction_type') ?? ''),
+    obstruction_offset_mm: formData.get('obstruction_offset_mm') || undefined,
+    obstruction_notes: String(formData.get('obstruction_notes') ?? ''),
+    cap_end_required: capEndRequired,
+    cap_end_notes: String(formData.get('cap_end_notes') ?? ''),
+  };
+
+  const parsed = updateAssetSchema.safeParse(raw);
+  if (!parsed.success) throw new Error('Invalid asset update input');
+
+  const supabase = createSupabaseAdminClient();
+
+  // 1. Fetch existing asset to get survey_id (for redirect) and verify existence
+  const { data: existingAsset, error: fetchError } = await supabase
+    .from('assets')
+    .select('id, survey_id')
+    .eq('id', parsed.data.asset_id)
+    .single();
+
+  if (fetchError || !existingAsset) throw new Error('Asset not found');
+
+  // 2. Fetch config for validation
+  const { data: config, error: configError } = await supabase
+    .from('asset_type_configs')
+    .select('*')
+    .eq('asset_type', parsed.data.asset_type)
+    .single();
+
+  if (configError) throw new Error(configError.message);
+
+  const minComplexity = Number(config.min_complexity_level ?? 1);
+  const requestedComplexity = Number(parsed.data.complexity_level);
+  const complexity = Math.max(minComplexity, requestedComplexity);
+
+  const capEndNotes = parsed.data.cap_end_notes?.trim() ? parsed.data.cap_end_notes.trim() : null;
+
+  // 3. Update Asset
+  const baseUpdate = {
+    asset_tag: parsed.data.asset_tag,
+    asset_type: parsed.data.asset_type,
+    quantity: parsed.data.quantity,
+    location_area: parsed.data.location_area || null,
+    service: parsed.data.service || null,
+    complexity_level: complexity,
+    obstruction_present: parsed.data.obstruction_present,
+    obstruction_type: parsed.data.obstruction_present ? parsed.data.obstruction_type || null : null,
+    obstruction_offset_mm:
+      parsed.data.obstruction_present && parsed.data.obstruction_offset_mm != null
+        ? parsed.data.obstruction_offset_mm
+        : null,
+    obstruction_notes: parsed.data.obstruction_present ? parsed.data.obstruction_notes || null : null,
+  };
+  
+  const updateWithCapEnd = { 
+    ...baseUpdate,
+    cap_end_required: parsed.data.cap_end_required,
+    cap_end_notes: parsed.data.cap_end_required ? capEndNotes : null,
+  };
+
+  let updateAttempt = await supabase.from('assets').update(updateWithCapEnd).eq('id', existingAsset.id);
+  if (updateAttempt.error) {
+     const msg = updateAttempt.error.message || '';
+     if (msg.includes('cap_end_required') || msg.includes('cap_end_notes')) {
+        updateAttempt = await supabase.from('assets').update(baseUpdate).eq('id', existingAsset.id);
+     }
+  }
+  if (updateAttempt.error) throw new Error(updateAttempt.error.message);
+
+  // 4. Update Measurements (Delete all for this asset and re-insert)
+  // Deleting helps handle schema changes (level1 vs level2) or key changes
+  await supabase.from('measurements').delete().eq('asset_id', existingAsset.id);
+
+  const measurementRows: Array<{ asset_id: string; key: string; label: string; value_mm: number; sequence?: number | null }> = [];
+
+  if (complexity === 1) {
+    const keys: string[] = Array.isArray(config.level1_measurement_keys) ? config.level1_measurement_keys : [];
+    for (const key of keys) {
+      const rawValue = formData.get(`m_${key}`);
+      if (rawValue == null || String(rawValue).trim() === '') {
+        throw new Error(`Missing required measurement: ${getMeasurementDefinition(key).label}`);
+      }
+      const num = Number(rawValue);
+      if (!Number.isFinite(num) || num <= 0) {
+        throw new Error(`Invalid measurement: ${getMeasurementDefinition(key).label}`);
+      }
+      const def = getMeasurementDefinition(key);
+      measurementRows.push({ asset_id: existingAsset.id, key, label: def.label, value_mm: num });
+    }
+  } else {
+    const steps = config.level2_template?.steps ?? [];
+    if (!Array.isArray(steps) || steps.length === 0) {
+      throw new Error('No Level 2 template configured for this asset type');
+    }
+    for (const step of steps) {
+      const key = String(step.key);
+      const label = String(step.label ?? getMeasurementDefinition(key).label);
+      const seq = step.sequence != null ? Number(step.sequence) : null;
+
+      const rawValue = formData.get(`m_${key}`);
+      if (rawValue == null || String(rawValue).trim() === '') {
+        throw new Error(`Missing required measurement: ${label}`);
+      }
+      const num = Number(rawValue);
+      if (!Number.isFinite(num) || num <= 0) {
+        throw new Error(`Invalid measurement: ${label}`);
+      }
+      measurementRows.push({ asset_id: existingAsset.id, key, label, value_mm: num, sequence: seq });
+    }
+  }
+
+  const { error: measurementError } = await supabase.from('measurements').insert(measurementRows);
+  if (measurementError) throw new Error(measurementError.message);
+
+  // 5. Update Photos
+  const bucket = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ?? 'survey-photos';
+  const now = new Date();
+  const surveySeg = safeSegment(existingAsset.survey_id);
+  const assetSeg = safeSegment(existingAsset.id);
+
+  // Photos: Determine required types
+  const requiredCorePhotoTypes: string[] =
+    complexity === 1
+      ? ['main']
+      : Array.isArray(config.required_photo_types)
+        ? config.required_photo_types
+        : ['overall', 'side', 'connection', 'tape_length', 'tape_diameter'];
+
+  const photoTypes: Array<{ photo_type: string; input: string; label: string }> = requiredCorePhotoTypes.map((t) => ({
+    photo_type: t,
+    input: `p_${t}`,
+    label: t === 'main' ? 'main photo' : t.replace(/_/g, ' '),
+  }));
+
+  if (parsed.data.obstruction_present) {
+    photoTypes.push(
+      { photo_type: 'obstruction_wide', input: 'p_obstruction_wide', label: 'obstruction wide' },
+      { photo_type: 'obstruction_close', input: 'p_obstruction_close', label: 'obstruction close-up' },
+    );
+  }
+
+  if (complexity === 2) {
+    const steps = config.level2_template?.steps ?? [];
+    for (const step of steps) {
+      if (!step?.requiresPhoto) continue;
+      const key = String(step.key);
+      const photoType = `dim_${key}`;
+      photoTypes.push({
+        photo_type: photoType,
+        input: `p_${photoType}`,
+        label: String(step.label ?? key),
+      });
+    }
+  }
+
+  // Check existing photos to validate requirements if new file not provided
+  const { data: existingPhotosData } = await supabase
+    .from('photos')
+    .select('photo_type')
+    .eq('asset_id', existingAsset.id);
+  const existingPhotoTypes = new Set(existingPhotosData?.map((p) => p.photo_type) ?? []);
+
+  const rowsToUpsert: Array<{
+    asset_id: string;
+    photo_type: string;
+    kind?: string;
+    storage_path: string;
+    public_url: string | null;
+    meta?: any;
+  }> = [];
+
+  for (const p of photoTypes) {
+    const value = formData.get(p.input);
+    const hasFile = isFile(value) && value.size > 0;
+
+    if (hasFile) {
+        const file = value as File;
+        if (file.size > 15 * 1024 * 1024) throw new Error(`Photo too large: ${p.label}`);
+        
+        const ext = safeExt(file);
+        const path = `surveys/${surveySeg}/assets/${assetSeg}/${p.photo_type}-${now.getTime()}.${ext}`;
+        const bytes = new Uint8Array(await file.arrayBuffer());
+
+        const { error: uploadError } = await supabase.storage.from(bucket).upload(path, bytes, {
+            contentType: file.type || undefined,
+            upsert: true,
+        });
+        if (uploadError) throw new Error(uploadError.message);
+
+        const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(path);
+        rowsToUpsert.push({
+            asset_id: existingAsset.id,
+            photo_type: p.photo_type,
+            kind: 'photo',
+            storage_path: path,
+            public_url: publicData?.publicUrl ?? null,
+        });
+    } else {
+        // No new file. Check if existing.
+        if (!existingPhotoTypes.has(p.photo_type)) {
+             throw new Error(`Missing required photo: ${p.label}`);
+        }
+    }
+  }
+
+  // 6. Sketch (Update only if changed/provided)
+  // Sketches are usually edited or replaced. If sketch_png_data_url is provided, we update.
+  // Note: If user merely opened sketch pad and saved without change, client might send same data.
+  // If sketch field is empty string, does it mean delete? Or keep?
+  // We assume: if sketch_png_data_url provided -> update. If not -> keep.
+  
+  const sketchPngDataUrl = String(formData.get('sketch_png_data_url') ?? '').trim();
+  const sketchDocJson = String(formData.get('sketch_doc_json') ?? '').trim();
+
+  if (sketchPngDataUrl) {
+    const bytes = parseDataUrlPng(sketchPngDataUrl);
+     if (bytes.byteLength > 6 * 1024 * 1024) {
+      throw new Error('Sketch too large (max 6MB)');
+    }
+
+    const path = `surveys/${surveySeg}/assets/${assetSeg}/sketch-${now.getTime()}.png`;
+    const { error: uploadError } = await supabase.storage.from(bucket).upload(path, bytes, {
+        contentType: 'image/png',
+        upsert: true,
+    });
+    if (uploadError) throw new Error(uploadError.message);
+    const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(path);
+
+    let meta: any = undefined;
+    if (sketchDocJson) {
+      try {
+        meta = { doc: JSON.parse(sketchDocJson), version: 1 };
+      } catch {
+        meta = { version: 1 };
+      }
+    } else {
+      meta = { version: 1 };
+    }
+
+    rowsToUpsert.push({
+      asset_id: existingAsset.id,
+      photo_type: 'sketch',
+      kind: 'sketch',
+      storage_path: path,
+      public_url: publicData?.publicUrl ?? null,
+      meta,
+    });
+  }
+
+  if (rowsToUpsert.length > 0) {
+      let photosAttempt = await supabase.from('photos').upsert(rowsToUpsert as any, { onConflict: 'asset_id,photo_type' });
+      if (photosAttempt.error) {
+        const msg = photosAttempt.error.message || '';
+        if (msg.includes('kind') || msg.includes('meta')) {
+            const fallbackRows = rowsToUpsert.map(({ kind: _k, meta: _m, ...rest }) => rest);
+            photosAttempt = await supabase.from('photos').upsert(fallbackRows as any, { onConflict: 'asset_id,photo_type' });
+        }
+      }
+      if (photosAttempt.error) throw new Error(photosAttempt.error.message);
+  }
+
+  redirect(`/surveys/${existingAsset.survey_id}`);
+}

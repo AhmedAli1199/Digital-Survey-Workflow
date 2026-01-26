@@ -15,6 +15,7 @@ export function Level2ImageTableEntry(props: {
   pdfUrl?: string | null;
   steps: Step[];
   tableRegion: NormalizedRect;
+  initialValues?: Record<string, number>;
 }) {
   const sortedSteps = useMemo(() => {
     const arr = (props.steps ?? []).map((s: any, i) => ({
@@ -79,23 +80,24 @@ export function Level2ImageTableEntry(props: {
           >
             <div className="h-full w-full overflow-hidden rounded-lg border border-slate-900/20 bg-white/95 shadow-sm backdrop-blur">
               <div className="h-full w-full overflow-auto">
-                <table className="w-full border-collapse text-[12px]">
+                <table className="w-full table-fixed border-collapse text-[12px]">
                   <thead>
                     <tr className="bg-slate-50">
-                      <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold text-slate-700">Dim</th>
-                      <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold text-slate-700">Value (mm)</th>
+                      <th className="w-[45%] border-b border-slate-200 px-1 py-2 text-left font-semibold text-slate-700">Dim</th>
+                      <th className="w-[55%] border-b border-slate-200 px-1 py-2 text-left font-semibold text-slate-700">Value (mm)</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sortedSteps.map((s) => (
                       <tr key={s.key}>
-                        <td className="border-b border-slate-100 px-2 py-2 text-slate-800">
+                        <td className="border-b border-slate-100 px-1 py-2 text-slate-800">
                           <div className="truncate">{s.label}</div>
                         </td>
-                        <td className="border-b border-slate-100 px-2 py-1">
+                        <td className="border-b border-slate-100 px-1 py-1">
                           <input
                             name={`m_${s.key}`}
                             inputMode="decimal"
+                            defaultValue={props.initialValues?.[s.key]}
                             placeholder="mm"
                             aria-label={s.label}
                             required

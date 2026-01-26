@@ -65,6 +65,7 @@ const PdfPage = React.memo(function PdfPage(props: {
 export function Level2DiagramEntryImpl(props: {
   url: string;
   steps: Level2Step[];
+  initialValues?: Record<string, number>;
 }) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const width = useElementWidth(wrapRef);
@@ -201,6 +202,7 @@ export function Level2DiagramEntryImpl(props: {
                       name={`m_${s.key}`}
                       inputMode="decimal"
                       placeholder="mm"
+                      defaultValue={props.initialValues?.[s.key]}
                       aria-label={s.label}
                       required
                       className={`h-9 w-[84px] rounded-lg border bg-white/95 px-2 text-sm shadow-sm outline-none backdrop-blur ${
@@ -252,6 +254,7 @@ export function Level2DiagramEntryImpl(props: {
                   name={`m_${s.key}`}
                   inputMode="decimal"
                   placeholder="mm"
+                  defaultValue={props.initialValues?.[s.key]}
                   aria-label={s.label}
                   required
                   className="h-9 w-24 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-slate-400"

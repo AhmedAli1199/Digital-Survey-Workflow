@@ -110,15 +110,23 @@ export default async function SurveyDetailPage(props: { params: Promise<{ id: st
                   <div className="font-medium text-slate-900">{a.asset_tag}</div>
                   <div className="text-xs text-slate-500">{a.asset_type}</div>
                 </div>
-                <div className="col-span-3 text-slate-700">{a.location_area || '—'}</div>
-                <div className="col-span-2 text-slate-700">Qty {a.quantity}</div>
-                <div className="col-span-2">
+                <div className="col-span-3 text-slate-700 truncate">{a.location_area || '—'}</div>
+                <div className="col-span-1 text-slate-700">x{a.quantity}</div>
+                <div className="col-span-1">
                   <span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-700">
                     L{a.complexity_level}
                   </span>
                 </div>
-                <div className="col-span-1 text-right text-xs text-slate-500">
+                <div className="col-span-1 text-xs text-slate-500">
                   {(a as any).cap_end_required ? 'Cap' : a.obstruction_present ? 'Obs' : ''}
+                </div>
+                <div className="col-span-2 text-right">
+                  <Link
+                    href={`/surveys/${id}/assets/${a.id}/edit`}
+                    className="inline-flex rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Edit
+                  </Link>
                 </div>
               </div>
             ))}

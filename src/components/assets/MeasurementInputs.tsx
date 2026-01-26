@@ -5,6 +5,7 @@ import { getMeasurementDefinition } from '@/lib/domain/measurementCatalog';
 export function MeasurementInputs(props: {
   measurementKeys: string[];
   title: string;
+  initialValues?: Record<string, number>;
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6">
@@ -12,12 +13,14 @@ export function MeasurementInputs(props: {
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         {props.measurementKeys.map((key) => {
           const def = getMeasurementDefinition(key);
+          const init = props.initialValues?.[key];
           return (
             <div key={key}>
               <label className="text-xs font-semibold text-slate-600">{def.label} *</label>
               <input
                 name={`m_${key}`}
                 inputMode="decimal"
+                defaultValue={init}
                 className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
                 placeholder={def.placeholder ?? ''}
                 required

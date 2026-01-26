@@ -18,4 +18,8 @@ export const Level2DiagramEntry = dynamic(
       </div>
     ),
   },
-);
+) as React.ComponentType<{
+  url: string;
+  steps: any[]; // relaxed type to avoid export issues, but should be same as Level2Step
+  initialValues?: Record<string, number>;
+}>;
