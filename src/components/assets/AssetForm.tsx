@@ -31,6 +31,7 @@ const LEVEL1_MAIN_PHOTO: PhotoField = {
 export function AssetForm(props: { 
   surveyId: string; 
   configs: AssetTypeConfigRow[];
+  defaultTag?: string;
   initialData?: AssetRow & {
     measurements?: { key: string; value_mm: number }[];
     photos?: { photo_type: string; public_url: string | null; meta?: any }[];
@@ -42,6 +43,22 @@ export function AssetForm(props: {
   const initialConfig = isEditing 
     ? props.configs.find(c => c.asset_type === initialData?.asset_type) ?? props.configs[0]
     : props.configs[0];
+
+  // Measurements State for persistence across type switching
+  const initialMeasurements = useMemo(() => {
+    if (!initialData?.measurements) return {};
+    const map: Record<string, number> = {};
+    for (const m of initialData.measurements) {
+        map[m.key] = m.value_mm;
+    }
+    return map;
+  }, [initialData]);
+
+  const [measurements, setMeasurements] = useState<Record<string, number>>(initialMeasurements);
+
+  const handleMeasurementChange = (key: string, value: number) => {
+    setMeasurements((prev) => ({ ...prev, [key]: value }));
+  };
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -123,15 +140,7 @@ export function AssetForm(props: {
     return arr.sort((a: any, b: any) => (a.sequence ?? 0) - (b.sequence ?? 0));
   }, [level2Steps]) as Array<{ key: string; label: string; sequence: number; [key: string]: any }>; // Explicit cast to fix implicit any
 
-  // Initial measurements map
-  const initialMeasurements = useMemo(() => {
-    if (!initialData?.measurements) return {};
-    const map: Record<string, number> = {};
-    for (const m of initialData.measurements) {
-        map[m.key] = m.value_mm;
-    }
-    return map;
-  }, [initialData]);
+  const active = true; // Placeholder if needed
 
   // Existing photos map
   const existingPhotos = useMemo(() => {
@@ -208,7 +217,7 @@ export function AssetForm(props: {
             <input
               name="asset_tag"
               required
-              defaultValue={initialData?.asset_tag}
+              defaultValue={initialData?.asset_tag ?? props.defaultTag}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
               placeholder="e.g., CV-001"
             />
@@ -328,7 +337,8 @@ export function AssetForm(props: {
               pdfUrl={drawingUrl}
               steps={sortedLevel2Steps as any}
               tableRegion={tableRegion}
-              initialValues={initialMeasurements}
+              values={measurements}
+              onChange={handleMeasurementChange}
             />
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
@@ -338,14 +348,22 @@ export function AssetForm(props: {
                    Let's see original NewAssetForm logic.
                */}
               <div className="self-start md:sticky md:top-4">
-                 <DiagramViewer url={drawingImageUrl || drawingUrl} />
+                 <Level2ImageEntry 
+                    key={`${assetType}-i`}
+                    imageUrl={drawingImageUrl as string}
+                    pdfUrl={drawingUrl}
+                    steps={sortedLevel2Steps as any}
+                    values={measurements}
+                    onChange={handleMeasurementChange}
+                 />
               </div>
               <div>
                 <MeasurementInputs 
                     key={`${assetType}-m`}
                     title="Measurements" 
                     measurementKeys={sortedLevel2Steps.map((s) => s.key)}
-                    initialValues={initialMeasurements}
+                    values={measurements}
+                    onChange={handleMeasurementChange}
                 />
               </div>
             </div>
@@ -355,7 +373,8 @@ export function AssetForm(props: {
                 key={`${assetType}-m`} 
                 title="Level 2 Measurements" 
                 measurementKeys={sortedLevel2Steps.map((s) => s.key)}
-                initialValues={initialMeasurements}
+                values={measurements}
+                onChange={handleMeasurementChange}
             />
         )
       ) : (
@@ -363,7 +382,8 @@ export function AssetForm(props: {
             key={`${assetType}-m`} 
             title="Measurements" 
             measurementKeys={level1Keys} 
-            initialValues={initialMeasurements}
+            values={measurements}
+            onChange={handleMeasurementChange}
         />
       )}
 

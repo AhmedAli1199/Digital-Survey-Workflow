@@ -600,3 +600,94 @@ export async function updateAsset(formData: FormData) {
 
   redirect(`/surveys/${existingAsset.survey_id}`);
 }
+
+import { revalidatePath } from 'next/cache';
+
+export async function createPlaceholderAsset(surveyId: string) {
+  const supabase = createSupabaseAdminClient();
+
+  // 1. Get a default asset type (required field)
+  const { data: configs, error: configError } = await supabase
+    .from('asset_type_configs')
+    .select('asset_type, min_complexity_level')
+    .limit(1);
+
+  if (configError || !configs || configs.length === 0) {
+    throw new Error('No asset types configured. Cannot create placeholder.');
+  }
+
+  const defaultConfig = configs[0];
+
+  // 2. Count existing assets to generate "Asset N"
+  const { count, error: countError } = await supabase
+    .from('assets')
+    .select('*', { count: 'exact', head: true })
+    .eq('survey_id', surveyId);
+  
+  if (countError) throw new Error(countError.message);
+
+  const nextNum = (count ?? 0) + 1;
+  const nextTag = `Asset ${nextNum}`;
+
+  // 3. Insert Placeholder
+  const { data: asset, error: insertError } = await supabase
+    .from('assets')
+    .insert({
+      survey_id: surveyId,
+      asset_tag: nextTag,
+      asset_type: defaultConfig.asset_type,
+      quantity: 1,
+      complexity_level: defaultConfig.min_complexity_level ?? 1,
+      obstruction_present: false,
+    })
+    .select('id')
+    .single();
+
+  if (insertError) throw new Error(insertError.message);
+
+  revalidatePath(`/surveys/${surveyId}`);
+  return asset;
+}
+
+export async function deleteAsset(assetId: string) {
+  const supabase = createSupabaseAdminClient();
+
+  // 1. Get survey_id before deleting
+  const { data: asset, error: fetchError } = await supabase
+    .from('assets')
+    .select('survey_id')
+    .eq('id', assetId)
+    .single();
+    
+  if (fetchError || !asset) throw new Error('Asset not found');
+
+  const surveyId = asset.survey_id;
+
+  // 2. Delete the asset
+  const { error: deleteError } = await supabase
+    .from('assets')
+    .delete()
+    .eq('id', assetId);
+
+  if (deleteError) throw new Error(deleteError.message);
+
+  // 3. Renumber remaining assets
+  const { data: allAssets, error: listError } = await supabase
+    .from('assets')
+    .select('id, asset_tag, created_at')
+    .eq('survey_id', surveyId)
+    .order('created_at', { ascending: true });
+
+  if (!listError && allAssets && allAssets.length > 0) {
+    let index = 1;
+    for (const a of allAssets) {
+       const newTag = `Asset ${index}`;
+       if (a.asset_tag !== newTag) {
+         await supabase.from('assets').update({ asset_tag: newTag }).eq('id', a.id);
+       }
+       index++;
+    }
+  }
+
+  revalidatePath(`/surveys/${surveyId}`);
+}

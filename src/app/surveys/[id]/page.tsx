@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { AssetRow, SurveyRow } from '@/lib/supabase/types';
+import { AddAssetButton } from '@/components/surveys/AddAssetButton';
+import { DeleteAssetButton } from '@/components/surveys/DeleteAssetButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,12 +46,7 @@ export default async function SurveyDetailPage(props: { params: Promise<{ id: st
           </div>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Link
-            href={`/surveys/${id}/assets/new`}
-            className="inline-flex items-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-          >
-            Add asset
-          </Link>
+          <AddAssetButton surveyId={id} />
           <Link
             href="/surveys"
             className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
@@ -120,13 +117,14 @@ export default async function SurveyDetailPage(props: { params: Promise<{ id: st
                 <div className="col-span-1 text-xs text-slate-500">
                   {(a as any).cap_end_required ? 'Cap' : a.obstruction_present ? 'Obs' : ''}
                 </div>
-                <div className="col-span-2 text-right">
+                <div className="col-span-2 text-right flex items-center justify-end gap-2">
                   <Link
                     href={`/surveys/${id}/assets/${a.id}/edit`}
                     className="inline-flex rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
                   >
                     Edit
                   </Link>
+                  <DeleteAssetButton assetId={a.id} />
                 </div>
               </div>
             ))}

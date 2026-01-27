@@ -10,13 +10,16 @@ type Step = {
   sequence?: number;
 };
 
-export function Level2ImageTableEntry(props: {
+type Level2ImageTableEntryProps = {
   imageUrl: string;
   pdfUrl?: string | null;
   steps: Step[];
   tableRegion: NormalizedRect;
-  initialValues?: Record<string, number>;
-}) {
+  values: Record<string, number>;
+  onChange: (key: string, value: number) => void;
+};
+
+export function Level2ImageTableEntry(props: Level2ImageTableEntryProps) {
   const sortedSteps = useMemo(() => {
     const arr = (props.steps ?? []).map((s: any, i) => ({
       key: String(s?.key ?? i),
@@ -30,6 +33,7 @@ export function Level2ImageTableEntry(props: {
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-sm font-semibold tracking-tight">Diagram entry</div>
@@ -96,8 +100,16 @@ export function Level2ImageTableEntry(props: {
                         <td className="border-b border-slate-100 px-1 py-1">
                           <input
                             name={`m_${s.key}`}
+                            type="number"
                             inputMode="decimal"
-                            defaultValue={props.initialValues?.[s.key]}
+                            // Use defaultValue to be uncontrolled but initialize with value
+                            defaultValue={props.values[s.key] ?? ''}
+                            onBlur={(e) => {
+                                const v = parseFloat(e.target.value);
+                                if (!isNaN(v)) {
+                                     props.onChange(s.key, v);
+                                }
+                            }}
                             placeholder="mm"
                             aria-label={s.label}
                             required

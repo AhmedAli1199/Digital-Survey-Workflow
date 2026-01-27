@@ -11,7 +11,16 @@ type Step = {
   hotspot?: NormalizedHotspot | null;
 };
 
-export function Level2ImageEntry(props: { imageUrl: string; pdfUrl?: string | null; steps: Step[] }) {
+type Level2ImageEntryProps = {
+  imageUrl: string;
+  pdfUrl?: string | null;
+  steps: Step[];
+  // NEW: Support for external value sync
+  values?: Record<string, number>;
+  onChange?: (key: string, value: number) => void;
+};
+
+export function Level2ImageEntry(props: Level2ImageEntryProps) {
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -126,13 +135,20 @@ export function Level2ImageEntry(props: { imageUrl: string; pdfUrl?: string | nu
                       placeholder="mm"
                       aria-label={s.label}
                       required
+                      defaultValue={props.values?.[s.key] ?? ''}
                       className={`h-9 w-[84px] rounded-lg border bg-white px-2 text-sm text-slate-900 placeholder:text-slate-400 caret-slate-900 shadow-sm outline-none ${
                         activeKey === s.key
                           ? 'border-emerald-500 ring-2 ring-emerald-500/25'
                           : 'border-slate-300 focus:border-slate-400'
                       }`}
                       onFocus={() => setActiveKey(s.key)}
-                      onBlur={() => setActiveKey((prev) => (prev === s.key ? null : prev))}
+                      onBlur={(e) => {
+                        setActiveKey((prev) => (prev === s.key ? null : prev));
+                        if (props.onChange) {
+                            const v = parseFloat(e.target.value);
+                            if (!isNaN(v)) props.onChange(s.key, v);
+                        }
+                      }}
                     />
 
                     {activeKey === s.key ? (

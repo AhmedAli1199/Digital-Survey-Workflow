@@ -13,6 +13,8 @@ export function Level2Stepper(props: {
   steps: Step[];
   activeKey?: string | null;
   onActiveKeyChange?: (key: string) => void;
+  values?: Record<string, number>;
+  onChange?: (key: string, value: number) => void;
 }) {
   const steps = useMemo(() => {
     const normalized = props.steps.map((s, i) => ({
@@ -95,6 +97,8 @@ export function Level2Stepper(props: {
                   id={`l2_${s.key}`}
                   name={`m_${s.key}`}
                   inputMode="decimal"
+                  // Use defaultValue to allow user typing freely
+                  defaultValue={props.values?.[s.key] ?? ''}
                   className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
                   placeholder="e.g., 450"
                   required={active}
@@ -105,7 +109,12 @@ export function Level2Stepper(props: {
                   onFocus={() => {
                     if (onActiveKeyChange) onActiveKeyChange(s.key);
                   }}
-                  onBlur={() => {
+                  onBlur={(e) => {
+                    if (props.onChange) {
+                      const v = parseFloat(e.target.value);
+                      if (!isNaN(v)) props.onChange(s.key, v);
+                    }
+
                     if (!active) return;
                     const nextIdx = Math.min(idx + 1, steps.length - 1);
                     const nextKey = steps[nextIdx]?.key;
