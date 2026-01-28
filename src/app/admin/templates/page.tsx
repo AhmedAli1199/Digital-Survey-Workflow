@@ -2,10 +2,12 @@ import Link from 'next/link';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { AssetTypeConfigRow } from '@/lib/supabase/types';
 import { autoCategorizeAssetVariants, createAssetVariant } from '@/app/actions/templates';
+import { requireAdmin } from '@/lib/auth/requireAdmin';
 
 export const dynamic = 'force-dynamic';
 
 export default async function TemplateAdminIndex() {
+  await requireAdmin();
   const supabase = createSupabaseAdminClient();
 
   const { data, error } = await supabase
@@ -23,24 +25,58 @@ export default async function TemplateAdminIndex() {
 
   const configs = (data ?? []) as AssetTypeConfigRow[];
 
-  const categories = Array.from(
-    new Set(
-      configs
-        .map((c) => ((c as any).asset_category ?? 'uncategorized') as string)
-        .map((c) => c.trim())
+  const CLIENT_CATEGORIES = [
+    'VALVES',
+    'STRAINERS',
+    'CONNECTORS',
+    'PIPEWORK / BENDS',
+    'VALVE ASSEMBLIES (DBB SETUPS)',
+    'REFERENCE / NON-SELECTABLE',
+  ];
+
+  const CANONICAL_BY_UPPER = new Map(CLIENT_CATEGORIES.map((c) => [c.toUpperCase(), c] as const));
+  const canonicalizeCategory = (raw: unknown) => {
+    const trimmed = String(raw ?? '').trim();
+    if (!trimmed) return 'uncategorized';
+    return CANONICAL_BY_UPPER.get(trimmed.toUpperCase()) ?? trimmed;
+  };
+
+  // Merge client categories with existing DB categories
+  const allCategories = Array.from(
+    new Set([
+      ...CLIENT_CATEGORIES,
+      ...configs
+        .map((c) => canonicalizeCategory((c as any).asset_category ?? 'uncategorized'))
         .filter(Boolean),
-    ),
+    ]),
+  ).sort((a, b) => a.localeCompare(b));
+  
+  // Use existing DB categories for grouping the list below, 
+  // but use the merged list for the input suggestions.
+  const categorisedItems = Array.from(
+    new Set(
+        configs
+        .map((c) => canonicalizeCategory((c as any).asset_category ?? 'uncategorized'))
+        .filter(Boolean)
+    )
   ).sort((a, b) => a.localeCompare(b));
 
-  const grouped = categories.map((cat) => ({
+  const grouped = categorisedItems.map((cat) => ({
     category: cat,
     items: configs
-      .filter((c) => String((c as any).asset_category ?? 'uncategorized') === cat)
+      .filter((c) => canonicalizeCategory((c as any).asset_category ?? 'uncategorized') === cat)
       .sort((a, b) => a.display_name.localeCompare(b.display_name)),
   }));
 
+  // Handle uncategorized if it's missing from the sets but items exist (legacy fallback)
+  const uncategorized = configs.filter(c => !((c as any).asset_category));
+  if (uncategorized.length > 0 && !categorisedItems.includes('uncategorized')) {
+      grouped.push({ category: 'uncategorized', items: uncategorized });
+  }
+
   return (
     <div className="grid gap-6">
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Template admin</h1>
@@ -48,16 +84,20 @@ export default async function TemplateAdminIndex() {
             Manage asset types, Level 2 diagrams, and dimension steps (D1/D2...).
           </p>
         </div>
-        <Link
-          href="/surveys"
-          className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
-        >
-          Back to surveys
-        </Link>
-      </div>
-
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-        No authentication is enabled yet. Treat this page as internal-only.
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/admin/users"
+            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+          >
+            Admin users
+          </Link>
+          <Link
+            href="/surveys"
+            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+          >
+            Back to surveys
+          </Link>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -92,10 +132,10 @@ export default async function TemplateAdminIndex() {
               list="asset-category-list"
               required
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
-              placeholder="e.g., Check valve"
+              placeholder="e.g., VALVES"
             />
             <datalist id="asset-category-list">
-              {categories.map((c) => (
+              {allCategories.map((c) => (
                 <option key={c} value={c} />
               ))}
             </datalist>

@@ -17,32 +17,47 @@ export const metadata: Metadata = {
   description: "Site survey capture for insulation/manufacturing workflows",
 };
 
-export default function RootLayout({
+import { headers } from 'next/headers';
+import { UserRole } from "@/lib/supabase/types";
+import { WatermarkProvider } from "@/components/security/WatermarkProvider";
+import SecurityGuard from "@/components/security/SecurityGuard";
+
+// ... existing imports
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headersList = await headers();
+  const userId = headersList.get('x-user-id') || 'preview-user';
+  const role = (headersList.get('x-user-role') as UserRole) || 'client';
+  const company = headersList.get('x-user-company') || 'TES Preview';
+
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-50 text-slate-900`}
       >
-        <div className="min-h-dvh">
-          <header className="border-b border-slate-200 bg-white">
-            <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-lg bg-slate-900" />
-                <div>
-                  <div className="text-sm font-semibold tracking-tight">Digital Survey System</div>
-                  <div className="text-xs text-slate-500">Site survey capture and reporting</div>
+        <WatermarkProvider userId={userId} userRole={role} companyName={company} >
+          <SecurityGuard />
+          <div className="min-h-dvh">
+            <header className="border-b border-slate-200 bg-white">
+              <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-slate-900" />
+                  <div>
+                    <div className="text-sm font-semibold tracking-tight">Digital Survey System</div>
+                    <div className="text-xs text-slate-500">{company} • {role.toUpperCase()}</div>
+                  </div>
                 </div>
+                <div className="text-xs text-slate-500">Surveys</div>
               </div>
-              <div className="text-xs text-slate-500">Surveys</div>
-            </div>
-          </header>
+            </header>
 
-          <main className="mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
-        </div>
+            <main className="mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
+          </div>
+        </WatermarkProvider>
       </body>
     </html>
   );

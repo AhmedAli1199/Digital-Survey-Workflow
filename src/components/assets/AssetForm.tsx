@@ -28,6 +28,26 @@ const LEVEL1_MAIN_PHOTO: PhotoField = {
   required: true,
 };
 
+const CANONICAL_CATEGORIES = [
+  'VALVES',
+  'STRAINERS',
+  'CONNECTORS',
+  'PIPEWORK / BENDS',
+  'VALVE ASSEMBLIES (DBB SETUPS)',
+  'REFERENCE / NON-SELECTABLE',
+];
+
+const CANONICAL_CATEGORY_BY_UPPER = new Map(
+  CANONICAL_CATEGORIES.map((c) => [c.toUpperCase(), c]),
+);
+
+function canonicalizeCategory(raw: unknown): string {
+  const trimmed = String(raw ?? '').trim();
+  if (!trimmed) return 'uncategorized';
+  const upper = trimmed.toUpperCase();
+  return CANONICAL_CATEGORY_BY_UPPER.get(upper) ?? trimmed;
+}
+
 export function AssetForm(props: { 
   surveyId: string; 
   configs: AssetTypeConfigRow[];
@@ -63,18 +83,22 @@ export function AssetForm(props: {
   const categories = useMemo(() => {
     const set = new Set<string>();
     for (const c of props.configs) {
-      const cat = String((c as any).asset_category ?? 'uncategorized').trim();
-      set.add(cat || 'uncategorized');
+      const cat = canonicalizeCategory((c as any).asset_category ?? 'uncategorized');
+      set.add(cat);
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [props.configs]);
 
-  const initialCategory = String((initialConfig as any)?.asset_category ?? categories[0] ?? 'uncategorized');
+  const initialCategory = canonicalizeCategory(
+    (initialConfig as any)?.asset_category ?? categories[0] ?? 'uncategorized',
+  );
 
   const [assetCategory, setAssetCategory] = useState<string>(initialCategory);
 
   const configsForCategory = useMemo(() => {
-    return props.configs.filter((c) => String((c as any).asset_category ?? 'uncategorized') === assetCategory);
+    return props.configs.filter(
+      (c) => canonicalizeCategory((c as any).asset_category ?? 'uncategorized') === assetCategory,
+    );
   }, [props.configs, assetCategory]);
 
   const [assetType, setAssetType] = useState<string>(initialData?.asset_type ?? configsForCategory[0]?.asset_type ?? initialConfig?.asset_type ?? '');
@@ -91,17 +115,23 @@ export function AssetForm(props: {
   const [capEndRequired, setCapEndRequired] = useState<boolean>(initialData?.cap_end_required ?? false);
 
   useEffect(() => {
-    if (isEditing) return; // Don't auto-switch when editing
-    
-    // When category changes, pick the first variant in that category.
+    // When category changes, ensure the selected variant is valid for that category.
+    // This must run in BOTH create + edit flows; otherwise the UI can show a new
+    // category while still using the previous config (diagram/steps won't refresh).
+    const allowed = new Set(configsForCategory.map((c) => c.asset_type));
+    if (assetType && allowed.has(assetType)) return;
+
     const next = configsForCategory[0]?.asset_type ?? '';
-    if (next && next !== assetType) {
-      setAssetType(next);
+    setAssetType(next);
+
+    if (next) {
+      const cfg = props.configs.find((c) => c.asset_type === next);
+      if (cfg) {
+        const min = (cfg.min_complexity_level ?? 1) as 1 | 2;
+        setRequestedComplexity(min);
+      }
     }
-    // If category has no variants, clear selection.
-    if (!next) setAssetType('');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assetCategory]);
+  }, [assetCategory, configsForCategory, assetType, props.configs]);
 
   const config = useMemo(
     () => props.configs.find((c) => c.asset_type === assetType) ?? configsForCategory[0] ?? initialConfig,

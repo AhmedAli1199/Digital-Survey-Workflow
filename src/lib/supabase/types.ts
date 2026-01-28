@@ -43,3 +43,16 @@ export type AssetTypeConfigRow = {
   level2_template: any | null;
   required_photo_types: string[];
 };
+
+export type UserRole = 'admin' | 'internal' | 'client' | 'manufacturing';
+
+export type ProfileRow = {
+  id: string; // matches auth.users.id
+  email: string;
+  full_name: string | null;
+  company_name: string | null;
+  role: UserRole;
+  license_status: 'active' | 'revoked' | 'expired';
+  created_at: string;
+  updated_at: string;
+};

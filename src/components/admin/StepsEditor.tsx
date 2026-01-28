@@ -48,6 +48,7 @@ export function StepsEditor(props: {
   });
 
   const [tableRegion, setTableRegion] = useState<NormalizedRect | null>(() => props.initialTableRegion ?? null);
+  const [nextStepPrefix, setNextStepPrefix] = useState('A');
 
   const json = useMemo(
     () => JSON.stringify(steps.map(({ _rowId: _ignored, ...rest }) => rest)),
@@ -64,25 +65,48 @@ export function StepsEditor(props: {
             Each row becomes a required measurement input (e.g., D1, D2). For photo enforcement, enable “Photo required”.
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() =>
-            setSteps((prev) => [
-              ...prev,
-              {
-                _rowId: createRowId(),
-                key: `d${prev.length + 1}_mm`,
-                label: `D${prev.length + 1} (mm)`,
-                sequence: prev.length + 1,
-                requiresPhoto: true,
-                hotspot: null,
-              },
-            ])
-          }
-          className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
-        >
-          Add step
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={nextStepPrefix}
+            onChange={(e) => setNextStepPrefix(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 outline-none focus:border-slate-400"
+          >
+            {['A', 'B', 'C', 'D', 'E'].map((letter) => (
+              <option key={letter} value={letter}>
+                {letter}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() =>
+              setSteps((prev) => {
+                // Find next number for this prefix
+                const existingNums = prev
+                  .map((s) => {
+                    const match = s.label.match(new RegExp(`^${nextStepPrefix}(\\d+)`));
+                    return match ? parseInt(match[1], 10) : 0;
+                  });
+                const nextNum = Math.max(0, ...existingNums) + 1;
+                
+                return [
+                  ...prev,
+                  {
+                    _rowId: createRowId(),
+                    key: `${nextStepPrefix.toLowerCase()}${nextNum}_mm`,
+                    label: `${nextStepPrefix}${nextNum} (mm)`,
+                    sequence: prev.length + 1,
+                    requiresPhoto: true,
+                    hotspot: null,
+                  },
+                ];
+              })
+            }
+            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
+          >
+            Add step
+          </button>
+        </div>
       </div>
 
       <input type="hidden" name="level2_steps_json" value={json} />

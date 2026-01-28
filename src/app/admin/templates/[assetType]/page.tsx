@@ -3,10 +3,12 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { AssetTypeConfigRow } from '@/lib/supabase/types';
 import { updateAssetTemplate } from '@/app/actions/templates';
 import { StepsEditor, type TemplateStep } from '@/components/admin/StepsEditor';
+import { requireAdmin } from '@/lib/auth/requireAdmin';
 
 export const dynamic = 'force-dynamic';
 
 export default async function TemplateAdminEdit(props: { params: Promise<{ assetType: string }> }) {
+  await requireAdmin();
   const { assetType } = await props.params;
 
   const supabase = createSupabaseAdminClient();

@@ -1,3 +1,22 @@
+# Local development
+
+## Node.js version (important)
+
+This project requires **Node.js 20 LTS**.
+
+If you use Node 23/24+, Next.js/Turbopack can crash during compilation (often showing GC spam / out-of-memory / hex-like stack traces).
+
+Recommended:
+- Install Node **20.x LTS** (or use nvm-windows and run `nvm install 20` then `nvm use 20`).
+
+## Run
+
+Make sure you run commands from the app folder (not the parent workspace folder):
+
+- `cd digital-survey-app`
+- `npm install`
+- `npm run dev`
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
