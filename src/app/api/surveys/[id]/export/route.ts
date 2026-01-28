@@ -1,8 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
 import { compositeWatermark } from '@/lib/server/watermark';
+
+function drawEmbeddedWatermark(args: {
+  page: any;
+  width: number;
+  height: number;
+  companyName: string;
+  userLabel: string;
+  projectRef: string;
+  font: any;
+}) {
+  const { page, width, height, companyName, userLabel, projectRef, font } = args;
+
+  const dateStr = new Date().toISOString().split('T')[0];
+  const line1 = 'TES - PROPRIETARY SYSTEM';
+  const line2 = `LICENSED TO: ${companyName.toUpperCase()}`;
+  const line3 = `REF: ${projectRef} • ${dateStr} • ${userLabel}`;
+
+  // Tile diagonal text across the page.
+  const stepX = Math.max(180, Math.floor(width / 3));
+  const stepY = Math.max(220, Math.floor(height / 3));
+
+  for (let y = -stepY; y < height + stepY; y += stepY) {
+    for (let x = -stepX; x < width + stepX; x += stepX) {
+      page.drawText(line1, {
+        x,
+        y,
+        size: 18,
+        font,
+        color: rgb(0.82, 0.0, 0.0),
+        rotate: degrees(-30),
+        opacity: 0.12,
+      });
+      page.drawText(line2, {
+        x,
+        y: y - 18,
+        size: 12,
+        font,
+        color: rgb(0.1, 0.1, 0.1),
+        rotate: degrees(-30),
+        opacity: 0.10,
+      });
+      page.drawText(line3, {
+        x,
+        y: y - 34,
+        size: 9,
+        font,
+        color: rgb(0.1, 0.1, 0.1),
+        rotate: degrees(-30),
+        opacity: 0.08,
+      });
+    }
+  }
+}
 
 export async function GET(
   request: NextRequest,
@@ -36,6 +89,7 @@ export async function GET(
     .single();
 
   const companyName = profile?.company_name || 'Unknown Company';
+  const userLabel = user.email || user.id;
 
   // 3. Fetch Real Survey Data
   const { data: survey, error: surveyError } = await supabase
@@ -71,6 +125,17 @@ export async function GET(
   for (const asset of (assets || [])) {
     const page = pdfDoc.addPage();
     const { width, height } = page.getSize();
+
+    // Embedded page-level watermark (always present in exports)
+    drawEmbeddedWatermark({
+      page,
+      width,
+      height,
+      companyName,
+      userLabel,
+      projectRef: survey.project_reference || 'REF-UNKNOWN',
+      font: timesRomanFont,
+    });
     
     // Header
     page.drawText(`Survey Report: ${survey.site_name}`, {
@@ -152,7 +217,7 @@ export async function GET(
     }
     
     // Footer Warning
-    page.drawText(`TES PROPERTY - DO NOT DISTRIBUTE - DOWNLOADED BY ${user.email}`, {
+    page.drawText(`TES PROPERTY - DO NOT DISTRIBUTE - DOWNLOADED BY ${userLabel}`, {
       x: 50,
       y: 30,
       size: 8,

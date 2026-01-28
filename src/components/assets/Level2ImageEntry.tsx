@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useMemo, useRef, useState } from 'react';
+import { useWatermark } from '@/components/security/WatermarkProvider';
+import { WatermarkOverlay } from '@/components/security/WatermarkOverlay';
 
 type NormalizedHotspot = { x: number; y: number; w: number; h: number };
 
@@ -21,6 +23,9 @@ type Level2ImageEntryProps = {
 };
 
 export function Level2ImageEntry(props: Level2ImageEntryProps) {
+  const { userRole } = useWatermark();
+  const canOpenSource = userRole !== 'client';
+
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -63,7 +68,7 @@ export function Level2ImageEntry(props: Level2ImageEntryProps) {
           <div className="mt-1 text-xs text-slate-500">Fast mobile mode (image). Units: mm.</div>
         </div>
         <div className="flex items-center gap-3">
-          {props.pdfUrl ? (
+          {canOpenSource && props.pdfUrl ? (
             <a
               href={props.pdfUrl}
               target="_blank"
@@ -73,14 +78,16 @@ export function Level2ImageEntry(props: Level2ImageEntryProps) {
               Open PDF
             </a>
           ) : null}
-          <a
-            href={props.imageUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
-          >
-            Open image
-          </a>
+          {canOpenSource ? (
+            <a
+              href={props.imageUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
+            >
+              Open image
+            </a>
+          ) : null}
         </div>
       </div>
 
@@ -94,6 +101,9 @@ export function Level2ImageEntry(props: Level2ImageEntryProps) {
             decoding="async"
             draggable={false}
           />
+
+          {/* Watermark overlay for on-screen viewing */}
+          <WatermarkOverlay className="z-10" />
 
           {/* Overlay inputs (percent-based) */}
           <div className="absolute inset-0 z-20" style={{ touchAction: 'manipulation' }}>

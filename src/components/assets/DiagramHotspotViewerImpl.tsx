@@ -2,6 +2,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
+import { useWatermark } from '@/components/security/WatermarkProvider';
+import { WatermarkOverlay } from '@/components/security/WatermarkOverlay';
 
 // Worker setup for modern bundlers (Next.js).
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
@@ -69,6 +71,9 @@ export function DiagramHotspotViewerImpl(props: {
   activeKey: string | null;
   onSelectKey: (key: string) => void;
 }) {
+  const { userRole } = useWatermark();
+  const canOpenSource = userRole !== 'client';
+
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const width = useElementWidth(wrapRef);
 
@@ -122,14 +127,16 @@ export function DiagramHotspotViewerImpl(props: {
           <div className="mt-1 text-xs text-slate-500">Tap a highlighted label area to jump to that input.</div>
         </div>
         <div className="flex items-center gap-3">
-          <a
-            href={props.url}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
-          >
-            Open PDF
-          </a>
+          {canOpenSource ? (
+            <a
+              href={props.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
+            >
+              Open PDF
+            </a>
+          ) : null}
           <div className="hidden sm:flex items-center gap-2">
             <label className="text-xs font-semibold text-slate-600">Zoom</label>
             <input
@@ -158,6 +165,9 @@ export function DiagramHotspotViewerImpl(props: {
 
       <div ref={wrapRef} className="mt-4">
         <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+          {/* Watermark overlay for on-screen viewing */}
+          <WatermarkOverlay className="z-10" />
+
           <div className="absolute inset-0 z-20" style={{ touchAction: 'manipulation' }}>
             {overlays.map((o) => (
               <button

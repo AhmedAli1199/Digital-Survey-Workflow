@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useMemo } from 'react';
+import { useWatermark } from '@/components/security/WatermarkProvider';
+import { WatermarkOverlay } from '@/components/security/WatermarkOverlay';
 
 type NormalizedRect = { x: number; y: number; w: number; h: number };
 
@@ -20,6 +22,9 @@ type Level2ImageTableEntryProps = {
 };
 
 export function Level2ImageTableEntry(props: Level2ImageTableEntryProps) {
+  const { userRole } = useWatermark();
+  const canOpenSource = userRole !== 'client';
+
   const sortedSteps = useMemo(() => {
     const arr = (props.steps ?? []).map((s: any, i) => ({
       key: String(s?.key ?? i),
@@ -40,7 +45,7 @@ export function Level2ImageTableEntry(props: Level2ImageTableEntryProps) {
           <div className="mt-1 text-xs text-slate-500">Fast mobile mode (image + table). Units: mm.</div>
         </div>
         <div className="flex items-center gap-3">
-          {props.pdfUrl ? (
+          {canOpenSource && props.pdfUrl ? (
             <a
               href={props.pdfUrl}
               target="_blank"
@@ -50,14 +55,16 @@ export function Level2ImageTableEntry(props: Level2ImageTableEntryProps) {
               Open PDF
             </a>
           ) : null}
-          <a
-            href={props.imageUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
-          >
-            Open image
-          </a>
+          {canOpenSource ? (
+            <a
+              href={props.imageUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
+            >
+              Open image
+            </a>
+          ) : null}
         </div>
       </div>
 
@@ -71,6 +78,9 @@ export function Level2ImageTableEntry(props: Level2ImageTableEntryProps) {
             decoding="async"
             draggable={false}
           />
+
+          {/* Watermark overlay for on-screen viewing */}
+          <WatermarkOverlay className="z-10" />
 
           {/* Table overlay inside the selected region */}
           <div

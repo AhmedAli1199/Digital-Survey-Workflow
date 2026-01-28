@@ -2,7 +2,8 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #0f172a;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -12,12 +13,8 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* Note: The app currently uses a light UI. If/when we add a true dark theme,
+   reintroduce dark mode using Tailwind's `dark` variant and matching surfaces. */
 
 /* Security Blur Effect */
 .secure-blur {
@@ -38,4 +35,19 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Ensure form controls remain readable across browsers (incl. autofill). */
+input,
+textarea,
+select {
+  color: var(--foreground);
+}
+
+input:-webkit-autofill,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--foreground) !important;
+  box-shadow: 0 0 0px 1000px #ffffff inset !important;
+  caret-color: var(--foreground) !important;
 }
