@@ -21,6 +21,7 @@ import { headers } from 'next/headers';
 import { UserRole } from "@/lib/supabase/types";
 import { WatermarkProvider } from "@/components/security/WatermarkProvider";
 import SecurityGuard from "@/components/security/SecurityGuard";
+import LogoutButton from '@/components/auth/LogoutButton';
 
 // ... existing imports
 
@@ -30,7 +31,8 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const headersList = await headers();
-  const userId = headersList.get('x-user-id') || 'preview-user';
+  const authedUserId = headersList.get('x-user-id');
+  const userId = authedUserId || 'preview-user';
   const role = (headersList.get('x-user-role') as UserRole) || 'client';
   const company = headersList.get('x-user-company') || 'TES Preview';
 
@@ -52,6 +54,7 @@ export default async function RootLayout({
                   </div>
                 </div>
                 <div className="text-xs text-slate-500">Surveys</div>
+                {authedUserId ? <LogoutButton /> : null}
               </div>
             </header>
 
